@@ -75,22 +75,55 @@ button {
     }
 
     .result {
-      min-height: 140px;
-      padding: 24px;
-      border-radius: 16px;
-      background: rgba(255, 255, 255, 0.06);
-    }
+  min-height: 140px;
+  padding: 24px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.06);
 
-    .diad-name,
+  display: flex;
+  flex-direction: column;
+  justify-content: center;   /* vertical centering */
+  align-items: center;       /* horizontal centering */
+  text-align: center;
+  gap: 8px;
+}
+
+    .dyad-name,
 .triad-name {
   font-size: 2.4rem;
   font-weight: 800;
   color: #ffffff;
   text-shadow: 0 2px 8px rgba(0,0,0,0.45);
   margin-bottom: 12px;
+  transition: transform 0.15s ease;
 }
 
-.diad-meta,
+.result:active .dyad-name,
+.result:active .triad-name {
+  transform: scale(1.05);
+}
+
+.result-pop .dyad-name,
+.result-pop .triad-name {
+  animation: resultPop 0.22s ease;
+}
+
+@keyframes resultPop {
+  0% {
+    transform: scale(0.96);
+    opacity: 0.85;
+  }
+  60% {
+    transform: scale(1.04);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.dyad-meta,
 .triad-meta {
   font-size: 1.1rem;
   color: #ffffff;
@@ -98,7 +131,7 @@ button {
   margin-bottom: 14px;
 }
 
-.diad-description,
+.dyad-description,
 .triad-description {
   font-size: 1rem;
   color: #ffffff;
@@ -106,11 +139,11 @@ button {
   line-height: 1.5;
 }
 
-    .diad-name,
+    .dyad-name,
 .triad-name,
-.diad-meta,
+.dyad-meta,
 .triad-meta,
-.diad-description,
+.dyad-description,
 .triad-description {
   color: #ffffff;
   text-shadow: 0 2px 6px rgba(0,0,0,0.45);
@@ -137,3 +170,26 @@ button {
      filter: grayscale(0.8);
      pointer-events: none;
     }
+
+   .controls {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+#engine-status,
+#status {
+  text-align: center;
+  margin-top: 10px;
+}
+
+#status {
+  margin-top: 8px;
+}
+
+.intro {
+  text-align: center;
+  margin: 14px auto 0;
+  max-width: 600px;
+}

@@ -14,25 +14,22 @@
 
     <div class="button-row" id="emotion-buttons"></div>
 
-    <div class="status" id="status">Select 2 primary emotions</div>
+    <div class="status" id="status">Select up to 3 primary emotions</div>
 
-    <div class="result" id="result">
-      <div class="diad-name">—</div>
-      <div class="diad-meta">No diad selected yet</div>
-      <div class="diad-description"></div>
-    </div>
+    <div class="result" id="result"></div>
 
     <div class="controls">
       <button class="reset-btn" id="reset-button">Reset</button>
+      <button id="startBtn">Start Engine</button>
     </div>
+
+    <div id="engine-status">Engine: Idle</div>
+    <p class="intro">
+    Combine emotional states to generate rhythm and sound.
+    </p>
   </div>
 
 
-  <script src="assets/js/script.js"></script>
+  <script src="assets/js/script.js" defer></script>
 </body>
-<button id="startBtn">Start Engine</button>
-<div id="status">Status: Idle</div>
-<p>
-Combine emotional states to generate rhythm and sound.
-</p>
 </html>

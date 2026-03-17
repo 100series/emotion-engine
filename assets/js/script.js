@@ -1,7 +1,5 @@
 console.log("script loaded");
-document.getElementById("startBtn").addEventListener("click", () => {
-  console.log("Audio unlocked");
-});
+
 document.getElementById("status").textContent = "Status: Playing";
 const grooveTypes = [
   "uplift",
@@ -118,9 +116,9 @@ function getActiveEmotionProfile() {
   }
 
   if (selectedEmotions.length === 2) {
-  const key = makeDiadKey(selectedEmotions[0], selectedEmotions[1]);
-  const diad = diads[key];
-  if (!diad) return null;
+  const key = makeDyadKey(selectedEmotions[0], selectedEmotions[1]);
+  const dyad = dyads[key];
+  if (!dyad) return null;
 
   const grooveMap = {
     "joy|trust": { groove: "warm", energy: 3 },                 // Love
@@ -154,7 +152,7 @@ function getActiveEmotionProfile() {
   };
 
   return {
-    ...diad,
+    ...dyad,
     ...(grooveMap[key] || { groove: "driving", energy: 3 })
   };
 }
@@ -234,7 +232,7 @@ function getTriadColors(ids) {
   return ids.map(id => emotionColors[id]);
 }
 
-    const diads = {
+    const dyads = {
   "anticipation|power": {
     name: "Aggressiveness",
     primaries: ["Power", "Anticipation"],
@@ -831,7 +829,7 @@ function getTriadColors(ids) {
     const resultEl = document.getElementById("result");
     const resetButton = document.getElementById("reset-button");
 
-    function makeDiadKey(emotionIdA, emotionIdB) {
+    function makeDyadKey(emotionIdA, emotionIdB) {
       return [emotionIdA, emotionIdB].sort().join("|");
     }
 
@@ -871,7 +869,7 @@ function getTriadColors(ids) {
     updateButtonStates();
     startGroove();
     if (selectedEmotions.length === 2) {
-      showDiadResult();
+      showDyadResult();
     } else if (selectedEmotions.length === 1 || selectedEmotions.length === 0) {
       resetResult();
     }
@@ -903,7 +901,7 @@ function getTriadColors(ids) {
   startGroove();
 
   if (selectedEmotions.length === 2) {
-    showDiadResult();
+    showDyadResult();
   } else if (selectedEmotions.length === 3) {
     showTriadResult();
   }
@@ -1387,48 +1385,55 @@ function playHat(step) {
 
   updateStatus();
 
-  if (selectedEmotions.length === 2) {
-    showDiadResult();
-  }
+  if (selectedEmotions.length >= 2) {
+  showDyadResult();
+} else {
+  resetResult();
+}
 
 
 
     function updateStatus() {
-      if (selectedEmotions.length === 0) {
-        statusEl.textContent = "Select 2 primary emotions";
-      } else if (selectedEmotions.length === 1) {
-        const firstLabel = getEmotionLabel(selectedEmotions[0]);
-        statusEl.textContent = `Selected: ${firstLabel}. Choose 1 more emotion.`;
-      } else {
-        const labels = selectedEmotions.map(getEmotionLabel).join(" + ");
-        statusEl.textContent = `Selected: ${labels}`;
-      }
-    }
+  if (selectedEmotions.length === 0) {
+    statusEl.textContent = "Select up to 3 primary emotions";
+  } else if (selectedEmotions.length === 1) {
+    const firstLabel = getEmotionLabel(selectedEmotions[0]);
+    statusEl.textContent = `Selected: ${firstLabel} — add up to 2 more.`;
+  } else if (selectedEmotions.length === 2) {
+    const labels = selectedEmotions.map(getEmotionLabel).join(" + ");
+    statusEl.textContent = `Selected: ${labels} — add 1 more if you'd like.`;
+  } else {
+    const labels = selectedEmotions.map(getEmotionLabel).join(" + ");
+    statusEl.textContent = `Selected: ${labels}`;
+  }
+}
 
-    function showDiadResult() {
+    function showDyadResult() {
       const [a, b] = selectedEmotions;
-      const key = makeDiadKey(a, b);
-      const diad = diads[key];
+      const key = makeDyadKey(a, b);
+      const dyad = dyads[key];
 
-      if (!diad) {
+      if (!dyad) {
         resultEl.innerHTML = `
-          <div class="diad-name">Unknown</div>
-          <div class="diad-meta">${getEmotionLabel(a)} + ${getEmotionLabel(b)}</div>
-          <div class="diad-description">No diad mapping exists yet for this combination.</div>
+          <div class="dyad-name">Unknown</div>
+          <div class="dyad-meta">${getEmotionLabel(a)} + ${getEmotionLabel(b)}</div>
+          <div class="dyad-description">No dyad mapping exists yet for this combination.</div>
         `;
         document.body.style.background = "#111";
         return;
       }
 
       resultEl.innerHTML = `
-        <div class="diad-name">${diad.name}</div>
-        <div class="diad-meta">${diad.primaries.join(" + ")}</div>
-        <div class="diad-description">${diad.description}</div>
+        <div class="dyad-name">${dyad.name}</div>
+        <div class="dyad-meta">${dyad.primaries.join(" + ")}</div>
+        <div class="dyad-description">${dyad.description}</div>
       `;
 
-      if (diad.colors) {
-       resultEl.style.background = `linear-gradient(135deg, ${diad.colors[0]}, ${diad.colors[1]})`;
+      if (dyad.colors) {
+       resultEl.style.background = `linear-gradient(135deg, ${dyad.colors[0]}, ${dyad.colors[1]})`;
       }
+
+      animateResult();
     }
 
     function showTriadResult() {
@@ -1437,9 +1442,9 @@ function playHat(step) {
 
   if (!triad) {
     resultEl.innerHTML = `
-      <div class="diad-name">Unknown Triad</div>
-      <div class="diad-meta">${selectedEmotions.map(getEmotionLabel).join(" + ")}</div>
-      <div class="diad-description">No triad mapping exists yet for this combination.</div>
+      <div class="dyad-name">Unknown Triad</div>
+      <div class="dyad-meta">${selectedEmotions.map(getEmotionLabel).join(" + ")}</div>
+      <div class="dyad-description">No triad mapping exists yet for this combination.</div>
     `;
     return;
   }
@@ -1448,9 +1453,9 @@ function playHat(step) {
   const colors = getTriadColors(ids);
 
   resultEl.innerHTML = `
-    <div class="diad-name">${triad.name}</div>
-    <div class="diad-meta">${ids.map(getEmotionLabel).join(" + ")}</div>
-    <div class="diad-description">${triad.description || ""}</div>
+    <div class="dyad-name">${triad.name}</div>
+    <div class="dyad-meta">${ids.map(getEmotionLabel).join(" + ")}</div>
+    <div class="dyad-description">${triad.description || ""}</div>
   `;
 
   resultEl.style.background =
@@ -1459,11 +1464,20 @@ function playHat(step) {
 
 function resetResult() {
   resultEl.innerHTML = `
-    <div class="diad-name">—</div>
-    <div class="diad-meta">No diad selected yet</div>
-    <div class="diad-description"></div>
+    <div class="dyad-name"></div>
+    <div class="dyad-meta">Select emotions to generate a blend</div>
+    <div class="dyad-description"></div>
   `;
   resultEl.style.background = "rgba(255,255,255,0.06)";
+}
+
+function animateResult() {
+  resultEl.classList.remove("result-pop");
+
+  // force reflow so the animation can retrigger every time
+  void resultEl.offsetWidth;
+
+  resultEl.classList.add("result-pop");
 }
 
 function updateButtonStates() {
@@ -1486,6 +1500,12 @@ function resetApp() {
     btn.style.background = "";
     btn.style.color = "";
   });
+
+  const engineStatusEl = document.getElementById("engine-status");
+  if (engineStatusEl) {
+    engineStatusEl.textContent = "Engine: Idle";
+  }
+
   updateButtonStates();
 }
 
@@ -1497,3 +1517,13 @@ function getEmotionLabel(emotionId) {
 resetButton.addEventListener("click", resetApp);
 renderEmotionButtons();
     updateStatus();
+
+ const startBtn = document.getElementById("startBtn");
+ const engineStatusEl = document.getElementById("engine-status");
+
+if (startBtn) {
+  startBtn.addEventListener("click", () => {
+    engineStatusEl.textContent = "Engine: Started";
+    console.log("Start Engine clicked");
+  });
+}
