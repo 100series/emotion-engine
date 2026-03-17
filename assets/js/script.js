@@ -1,4 +1,8 @@
 console.log("script loaded");
+document.getElementById("startBtn").addEventListener("click", () => {
+  console.log("Audio unlocked");
+});
+document.getElementById("status").textContent = "Status: Playing";
 const grooveTypes = [
   "uplift",
   "driving",
