@@ -23,24 +23,32 @@ document.querySelector("h1").textContent = "Emotion Engine";
   { id: "disgust", label: "Disgust", color: "#8B5CF6" }
 ];
 
+// ======================
+// ENGINE STATE
+// ======================
+
 let audioCtx = null;
 let grooveInterval = null;
 let step = 0;
+let phraseStep = 0;
+let barCount = 0;
+let bassJustPlayed = false;
 
 let kickSample;
 let snareSample;
 let hatSample;
+let shakerSample;
+let openHatSample;
+let selectedEmotions = [];
+let stepEmitter = null;
 
-const emotionFreqs = {
-  power: 130.81,        // C3
-  anticipation: 164.81, // E3
-  joy: 392.00,          // G4
-  trust: 220.00,        // A3
-  fear: 196.63,         // G3
-  surprise: 329.63,     // E4
-  sadness: 98.00,      // G2
-  disgust: 246.94       // B3
-};
+// ======================
+// MAPPING / DATA
+// ======================
+
+function setStepEmitter(fn) {
+  stepEmitter = fn;
+}
 
 const grooveProfiles = {
 
@@ -109,130 +117,18 @@ const grooveProfiles = {
 
 };
 
-function getActiveEmotionProfile() {
-  if (selectedEmotions.length === 3) {
-    const key = makeTriadKey(selectedEmotions);
-    return triads[key];
-  }
-
-  if (selectedEmotions.length === 2) {
-  const key = makeDyadKey(selectedEmotions[0], selectedEmotions[1]);
-  const dyad = dyads[key];
-  if (!dyad) return null;
-
-  const grooveMap = {
-    "joy|trust": { groove: "warm", energy: 3 },                 // Love
-    "fear|surprise": { groove: "tense", energy: 4 },            // Awe / Alarm
-    "power|joy": { groove: "triumphant", energy: 4 },           // Pride
-    "power|anticipation": { groove: "driving", energy: 4 },     // Aggressiveness
-    "anticipation|joy": { groove: "uplift", energy: 4 },        // Optimism
-    "anticipation|fear": { groove: "tense", energy: 3 },        // Anxiety
-    "anticipation|trust": { groove: "uplift", energy: 3 },      // Hope
-    "anticipation|surprise": { groove: "mysterious", energy: 3 }, // Confusion
-    "anticipation|sadness": { groove: "brooding", energy: 2 },  // Pessimism
-    "anticipation|disgust": { groove: "mysterious", energy: 2 },// Cynicism
-    "power|trust": { groove: "driving", energy: 4 },            // Dominance
-    "power|fear": { groove: "dark", energy: 2 },                // Frozenness
-    "power|surprise": { groove: "tense", energy: 4 },           // Outrage
-    "power|sadness": { groove: "brooding", energy: 3 },         // Envy
-    "power|disgust": { groove: "dark", energy: 3 },             // Contempt
-    "fear|joy": { groove: "brooding", energy: 2 },              // Guilt
-    "joy|surprise": { groove: "uplift", energy: 4 },            // Delight
-    "joy|sadness": { groove: "warm", energy: 2 },               // Catharsis
-    "disgust|joy": { groove: "mysterious", energy: 2 },         // Morbidness
-    "fear|trust": { groove: "brooding", energy: 2 },            // Submission
-    "surprise|trust": { groove: "uplift", energy: 3 },          // Curiosity
-    "sadness|trust": { groove: "warm", energy: 2 },             // Sentimentality
-    "disgust|trust": { groove: "mysterious", energy: 2 },       // Ambivalence
-    "fear|sadness": { groove: "dark", energy: 2 },              // Despair
-    "disgust|fear": { groove: "dark", energy: 2 },              // Shame
-    "sadness|surprise": { groove: "brooding", energy: 2 },      // Disapproval
-    "disgust|surprise": { groove: "tense", energy: 3 },         // Disbelief
-    "disgust|sadness": { groove: "dark", energy: 2 }            // Remorse
-  };
-
-  return {
-    ...dyad,
-    ...(grooveMap[key] || { groove: "driving", energy: 3 })
-  };
-}
-
-  if (selectedEmotions.length === 1) {
-  const primaryProfiles = {
-    power: { groove: "driving", energy: 4 },
-    anticipation: { groove: "uplift", energy: 3 },
-    joy: { groove: "warm", energy: 3 },
-    trust: { groove: "soft", energy: 2 },
-    fear: { groove: "tense", energy: 3 },
-    surprise: { groove: "mysterious", energy: 3 },
-    sadness: { groove: "brooding", energy: 1 },
-    disgust: { groove: "dark", energy: 2 }
-  };
-
-  return primaryProfiles[selectedEmotions[0]] || { groove: "driving", energy: 3 };
-}
-
-  return null;
-}
-
-function initAudio() {
-  if (!audioCtx) {
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-
-    loadSample("assets/samples/kick.wav").then(buffer => {
-      kickSample = buffer;
-      console.log("kick loaded");
-    }).catch(err => console.error("kick failed", err));
-
-    loadSample("assets/samples/snare.wav").then(buffer => {
-      snareSample = buffer;
-      console.log("snare loaded");
-    }).catch(err => console.error("snare failed", err));
-
-    loadSample("assets/samples/hihat.wav").then(buffer => {
-      hatSample = buffer;
-      console.log("hat loaded");
-    }).catch(err => console.error("hat failed", err));
-  }
-}
-
-function loadSample(url) {
-  return fetch(url)
-    .then(res => res.arrayBuffer())
-    .then(data => audioCtx.decodeAudioData(data));
-}
-
-function playSample(buffer, volume = 0.5) {
-  if (!buffer || !audioCtx) return;
-
-  const source = audioCtx.createBufferSource();
-  const gain = audioCtx.createGain();
-
-  source.buffer = buffer;
-  gain.gain.value = volume;
-
-  source.connect(gain);
-  gain.connect(audioCtx.destination);
-
-  source.start();
-}
-
-const emotionColors = {
-  power: "#FF5A5F",
-  anticipation: "#FF9F1C",
-  joy: "#FFD84D",
-  trust: "#4ADE80",
-  fear: "#38BDF8",
-  surprise: "#A78BFA",
-  sadness: "#5B6CFF",
-  disgust: "#8B5CF6"
+const emotionFreqs = {
+  power: 130.81,        // C3  (red)
+  anticipation: 146.83, // D3  (orange)
+  joy: 329.63,          // E4  (yellow)
+  trust: 174.61,        // F3  (green)
+  fear: 196.00,         // G3  (cyan)
+  surprise: 440.00,     // A4  (blue)
+  sadness: 123.47,      // B2  (indigo)
+  disgust: 261.63       // C4  (violet returning to C)
 };
 
-function getTriadColors(ids) {
-  return ids.map(id => emotionColors[id]);
-}
-
-    const dyads = {
+const dyads = {
   "anticipation|power": {
     name: "Aggressiveness",
     primaries: ["Power", "Anticipation"],
@@ -528,7 +424,7 @@ function getTriadColors(ids) {
   description: "Loss of dignity or reputation following a shameful or dishonorable act.",
   colors: ["#38BDF8","#5B6CFF","#8B5CF6"],
   groove: "dark",
-  energy: 2
+  energy: 1
 },
 
 /* -------- NEW TRIADS -------- */
@@ -621,7 +517,7 @@ function getTriadColors(ids) {
   name: "Traumatic Paralysis",
   description: "Emotional and psychological shutdown caused by overwhelming fear and loss.",
   groove: "dark",
-  energy: 2
+  energy: 1
 },
 
 "disgust|fear|power": {
@@ -768,7 +664,7 @@ function getTriadColors(ids) {
   name: "Gothic Sublimity",
   description: "Beauty perceived within darkness, melancholy, or decay.",
   groove: "dark",
-  energy: 2
+  energy: 1
 },
 
 "fear|sadness|trust": {
@@ -782,7 +678,7 @@ function getTriadColors(ids) {
   name: "Internalized Oppression",
   description: "Accepting negative judgments about oneself imposed by others.",
   groove: "dark",
-  energy: 2
+  energy: 1
 },
 
 "sadness|surprise|trust": {
@@ -803,14 +699,14 @@ function getTriadColors(ids) {
   name: "Shame",
   description: "Painful self-awareness of wrongdoing or personal failure.",
   groove: "dark",
-  energy: 2
+  energy: 1
 },
 
 "disgust|sadness|surprise": {
   name: "Horror",
   description: "Intense fear and revulsion in response to something shocking or grotesque.",
   groove: "dark",
-  energy: 4
+  energy: 2
 },
 
 "joy|sadness|trust": {
@@ -822,14 +718,8 @@ function getTriadColors(ids) {
 }
 
 };
-    let selectedEmotions = [];
 
-    const buttonsContainer = document.getElementById("emotion-buttons");
-    const statusEl = document.getElementById("status");
-    const resultEl = document.getElementById("result");
-    const resetButton = document.getElementById("reset-button");
-
-    function makeDyadKey(emotionIdA, emotionIdB) {
+function makeDyadKey(emotionIdA, emotionIdB) {
       return [emotionIdA, emotionIdB].sort().join("|");
     }
 
@@ -837,74 +727,148 @@ function getTriadColors(ids) {
   return ids.flat().sort().join("|");
 }
 
-    function renderEmotionButtons() {
-        buttonsContainer.innerHTML = "";
-
-    emotions.forEach((emotion) => {
-        const button = document.createElement("button");
-        button.textContent = emotion.label;
-        button.dataset.emotionId = emotion.id;
-        button.dataset.color = emotion.color;
-        button.classList.add("emotion-btn");
-        button.addEventListener("click", () => handleEmotionClick(emotion.id));
-        buttonsContainer.appendChild(button);
-  });
-}
-
- function handleEmotionClick(emotionId) {
-    initAudio();
-  const selectedButton = document.querySelector(`[data-emotion-id="${emotionId}"]`);
-
-  // Toggle OFF if already selected
-  if (selectedEmotions.includes(emotionId)) {
-    selectedEmotions = selectedEmotions.filter(id => id !== emotionId);
-
-    if (selectedButton) {
-      selectedButton.classList.remove("selected");
-      selectedButton.style.background = "";
-      selectedButton.style.color = "";
-    }
-
-    updateStatus();
-    updateButtonStates();
-    startGroove();
-    if (selectedEmotions.length === 2) {
-      showDyadResult();
-    } else if (selectedEmotions.length === 1 || selectedEmotions.length === 0) {
-      resetResult();
-    }
-
-    return;
-  }
-
-  // prevent more than 3 emotions
+function getActiveEmotionProfile() {
   if (selectedEmotions.length === 3) {
-    const removed = selectedEmotions.shift();
-    const removedButton = document.querySelector(`[data-emotion-id="${removed}"]`);
-    if (removedButton) {
-      removedButton.classList.remove("selected");
-      removedButton.style.background = "";
-      removedButton.style.color = "";
-    }
+    const key = makeTriadKey(selectedEmotions);
+    return triads[key];
   }
-
-  selectedEmotions.push(emotionId);
-
-  if (selectedButton) {
-    selectedButton.classList.add("selected");
-    selectedButton.style.background = selectedButton.dataset.color;
-    selectedButton.style.color = "#111";
-  }
-
-  updateStatus();
-  updateButtonStates();
-  startGroove();
 
   if (selectedEmotions.length === 2) {
-    showDyadResult();
-  } else if (selectedEmotions.length === 3) {
-    showTriadResult();
+  const key = makeDyadKey(selectedEmotions[0], selectedEmotions[1]);
+  const dyad = dyads[key];
+  if (!dyad) return null;
+
+  const grooveMap = {
+  "joy|trust": { groove: "warm", energy: 3 },
+  "fear|surprise": { groove: "tense", energy: 4 },
+  "joy|power": { groove: "triumphant", energy: 4 },
+  "anticipation|power": { groove: "driving", energy: 4 },
+  "anticipation|joy": { groove: "uplift", energy: 4 },
+  "anticipation|fear": { groove: "tense", energy: 3 },
+  "anticipation|trust": { groove: "uplift", energy: 3 },
+  "anticipation|surprise": { groove: "mysterious", energy: 3 },
+  "anticipation|sadness": { groove: "brooding", energy: 2 },
+  "anticipation|disgust": { groove: "mysterious", energy: 2 },
+  "power|trust": { groove: "driving", energy: 4 },
+  "fear|power": { groove: "dark", energy: 2 },
+  "power|surprise": { groove: "tense", energy: 4 },
+  "power|sadness": { groove: "brooding", energy: 3 },
+  "disgust|power": { groove: "dark", energy: 3 },
+  "fear|joy": { groove: "brooding", energy: 2 },
+  "joy|surprise": { groove: "uplift", energy: 4 },
+  "joy|sadness": { groove: "warm", energy: 2 },
+  "disgust|joy": { groove: "mysterious", energy: 2 },
+  "fear|trust": { groove: "brooding", energy: 2 },
+  "surprise|trust": { groove: "uplift", energy: 3 },
+  "sadness|trust": { groove: "warm", energy: 2 },
+  "disgust|trust": { groove: "mysterious", energy: 2 },
+  "fear|sadness": { groove: "dark", energy: 2 },
+  "disgust|fear": { groove: "dark", energy: 2 },
+  "sadness|surprise": { groove: "brooding", energy: 2 },
+  "disgust|surprise": { groove: "tense", energy: 3 },
+  "disgust|sadness": { groove: "dark", energy: 2 }
+};
+
+  return {
+    ...dyad,
+    ...(grooveMap[key] || { groove: "driving", energy: 3 })
+  };
+}
+
+  if (selectedEmotions.length === 1) {
+  const primaryProfiles = {
+    power: { groove: "driving", energy: 4 },
+    anticipation: { groove: "uplift", energy: 3 },
+    joy: { groove: "warm", energy: 3 },
+    trust: { groove: "soft", energy: 2 },
+    fear: { groove: "tense", energy: 2 },
+    surprise: { groove: "mysterious", energy: 3 },
+    sadness: { groove: "brooding", energy: 1 },
+    disgust: { groove: "dark", energy: 1 }
+  };
+
+  return primaryProfiles[selectedEmotions[0]] || { groove: "driving", energy: 3 };
+}
+
+  return null;
+}
+
+// ======================
+// AUDIO PRIMITIVES
+// ======================
+
+function initAudio() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    loadSample("assets/samples/kick.wav").then(buffer => {
+      kickSample = buffer;
+      console.log("kick loaded");
+    }).catch(err => console.error("kick failed", err));
+
+    loadSample("assets/samples/snare.wav").then(buffer => {
+      snareSample = buffer;
+      console.log("snare loaded");
+    }).catch(err => console.error("snare failed", err));
+
+    loadSample("assets/samples/hihat.wav").then(buffer => {
+      hatSample = buffer;
+      console.log("hat loaded");
+    }).catch(err => console.error("hat failed", err));
+
+    loadSample("assets/samples/shaker.wav").then(buffer => {
+     shakerSample = buffer;
+     console.log("shaker loaded");
+    }).catch(err => console.error("shaker failed", err));
+
+    loadSample("assets/samples/openhat.wav").then(buffer => {
+     openHatSample = buffer;
+     console.log("open hat loaded");
+    }).catch(err => console.error("open hat failed", err));
   }
+
+  if (audioCtx.state === "suspended") {
+    audioCtx.resume();
+  }
+}
+
+function loadSample(url) {
+  return fetch(url)
+    .then(res => res.arrayBuffer())
+    .then(data => audioCtx.decodeAudioData(data));
+}
+
+function playSample(buffer, volume = 0.5) {
+  if (!buffer || !audioCtx) return;
+
+  const source = audioCtx.createBufferSource();
+  const gain = audioCtx.createGain();
+
+  source.buffer = buffer;
+  gain.gain.value = volume;
+
+  source.connect(gain);
+  gain.connect(audioCtx.destination);
+
+  source.start();
+}
+
+function glideOscillator(osc, startFreq, endFreq, duration) {
+  osc.frequency.setValueAtTime(startFreq, audioCtx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(endFreq, audioCtx.currentTime + duration);
+}
+
+// ======================
+// SEQUENCER
+// ======================
+
+function getEvolutionState() {
+  return {
+    bar: barCount % 16,
+    isBar4: barCount % 4 === 3,
+    isBar8: barCount % 8 === 7,
+    isBar16: barCount % 16 === 15
+  };
 }
 
 function startGroove() {
@@ -913,52 +877,115 @@ function startGroove() {
   if (selectedEmotions.length === 0) return;
 
   step = 0;
-
-  function tick() {
-
-    const profile = getActiveEmotionProfile();
-    if (!profile) return;
-
-    const groove = grooveProfiles[profile.groove];
-
-    const stepIndex = step % 8;
-
-    if (groove.kickPattern[stepIndex]) playKick(step);
-    if (groove.snarePattern[stepIndex]) playSnare(step);
-    if (groove.hatPattern[stepIndex]) playHat(step);
-
-    const energy = profile.energy || 3;
-
-    if (energy >= 5) {
-    playHat();
-    }
-
-    // MUSIC
-    playBass(step);
-
-    if (selectedEmotions.length >= 2) {
-      playChord(step);
-    }
-
-    const swing = step % 2 ? 1.6 : 0.75;
-    const humanize = (Math.random() - 0.5) * 18;
-
-    const baseDelay = 120;
-    const delay = (baseDelay * swing) + humanize;
-
-    step = (step + 1) % 8;
-    grooveInterval = setTimeout(tick, delay);
-  }
+  phraseStep = 0;
+  barCount = 0;
 
   tick();
 }
+
+function tick() {
+  const profile = getActiveEmotionProfile();
+  if (!profile) return;
+
+  const groove = grooveProfiles[profile.groove];
+  const stepIndex = phraseStep % 8;
+  const isSecondBar = phraseStep >= 8;
+  const evo = getEvolutionState();
+
+  // DRUMS
+  if (groove.kickPattern[stepIndex]) playKick(stepIndex);
+  if (groove.snarePattern[stepIndex]) playSnare(stepIndex);
+  if (groove.hatPattern[stepIndex]) playHat(stepIndex);
+
+  playShaker(stepIndex);
+  playOpenHat(stepIndex);
+  playSpaceTone(stepIndex);
+
+  // 2-bar variation
+  if (isSecondBar) {
+    if (profile.groove === "driving" || profile.groove === "triumphant") {
+      if (stepIndex === 7 && Math.random() < 0.7) playKick(7);
+    }
+
+    if (profile.groove === "warm" || profile.groove === "brooding") {
+      if (stepIndex === 5 && Math.random() < 0.5) playHat(5);
+    }
+
+    if (profile.groove === "mysterious" || profile.groove === "tense") {
+      if (stepIndex === 3 && Math.random() < 0.45) playSnare(3);
+    }
+  }
+
+  // 4-bar variation
+  if (evo.isBar4) {
+    if ((profile.groove === "uplift" || profile.groove === "warm") && stepIndex === 7 && Math.random() < 0.5) {
+      playOpenHat(7);
+    }
+
+    if ((profile.groove === "dark" || profile.groove === "brooding") && stepIndex === 0 && Math.random() < 0.4) {
+      playSpaceTone(0);
+    }
+  }
+
+  // 8-bar variation
+  if (evo.isBar8) {
+    if ((profile.groove === "triumphant" || profile.groove === "driving") && stepIndex === 6 && Math.random() < 0.6) {
+      playKick(6);
+    }
+
+    if ((profile.groove === "mysterious" || profile.groove === "tense") && stepIndex === 7 && Math.random() < 0.5) {
+      playOpenHat(7);
+    }
+  }
+
+  // 16-bar turnaround
+  if (evo.isBar16) {
+    if (stepIndex === 7 && Math.random() < 0.75) {
+      playSnare(7);
+    }
+  }
+
+  // MUSIC
+  playBass(stepIndex);
+
+  if (selectedEmotions.length >= 2) {
+    playChord(stepIndex);
+  }
+
+  const swing = stepIndex % 2 ? 1.6 : 0.75;
+  const humanize = (Math.random() - 0.5) * 18;
+
+  const baseDelay = 120;
+  const delay = (baseDelay * swing) + humanize;
+
+  phraseStep = (phraseStep + 1) % 16;
+
+  if (phraseStep === 0) {
+    barCount++;
+  }
+
+  grooveInterval = setTimeout(tick, delay);
+  if (typeof stepEmitter === "function") {
+  stepEmitter({
+    step: stepIndex,
+    profile,
+    phraseStep,
+    barCount
+  });
+}
+}
+
+// ======================
+// VOICES
+// ======================
 
 function playKick(step) {
   const accentMap = {
     0: 0.75,
     4: 0.58,
     2: 0.32,
-    6: 0.26
+    6: 0.26,
+    7: 0.18
   };
 
   const volume = accentMap[step];
@@ -967,7 +994,107 @@ function playKick(step) {
   playSample(kickSample, volume);
 }
 
+function playSnare(step) {
+  const accentMap = {
+    2: 0.42,
+    6: 0.50,
+    3: 0.16,
+    5: 0.12,
+    7: 0.22
+  };
+
+  const volume = accentMap[step];
+  if (!volume) return;
+
+  playSample(snareSample, volume);
+}
+
+function playHat(step) {
+  const profile = getActiveEmotionProfile();
+  if (!profile) return;
+
+  const groove = grooveProfiles[profile.groove];
+  const stepIndex = step % 8;
+
+  if (!groove.hatPattern[stepIndex]) return;
+
+  const accentMap = {
+    1: 0.16,
+    3: 0.09,
+    5: 0.12,
+    7: 0.20
+  };
+
+  const volume = accentMap[stepIndex] || 0.08;
+  playSample(hatSample, volume);
+}
+
+function playOpenHat(step) {
+  if (!openHatSample) return;
+
+  const profile = getActiveEmotionProfile();
+  if (!profile) return;
+
+  const groove = profile.groove;
+  const energy = profile.energy || 3;
+
+  // only higher energy grooves get open hats
+  if (energy < 4) return;
+
+  // strategic placement (not constant)
+  const openSteps = {
+    uplift: [3, 7],
+    driving: [3],
+    triumphant: [3, 7],
+    warm: [7]
+  };
+
+  const steps = openSteps[groove] || [];
+
+  if (!steps.includes(step)) return;
+
+  // slight randomness so it's not repetitive
+  if (Math.random() > 0.7) return;
+
+  playSample(openHatSample, 0.35);
+}
+
+function playShaker(step) {
+  if (!shakerSample) return;
+
+  const profile = getActiveEmotionProfile();
+  if (!profile) return;
+
+  const groove = grooveProfiles[profile.groove];
+  const stepIndex = step % 8;
+
+  // only certain grooves get shaker
+  if (!["uplift", "triumphant", "driving", "warm"].includes(profile.groove)) return;
+
+  // groove-based pattern (like hats, but lighter)
+  const shakerPattern = groove.hatPattern;
+
+  if (!shakerPattern[stepIndex]) return;
+
+  const accentMap = {
+    0: 0.10,
+    1: 0.18,
+    2: 0.08,
+    3: 0.22,
+    4: 0.10,
+    5: 0.16,
+    6: 0.08,
+    7: 0.20
+  };
+
+  const volume = (accentMap[stepIndex] || 0.10) * 0.8;
+  if (Math.random() > 0.95) return;
+
+  playSample(shakerSample, volume);
+}
+
 function playBass(step) {
+  bassJustPlayed = false;
   if (selectedEmotions.length === 0) return;
 
   const profile = getActiveEmotionProfile();
@@ -979,15 +1106,15 @@ function playBass(step) {
 
 // probability the note actually plays
 const playChance = {
-  slow: 0.95,
-  pulse: 0.85,
-  bounce: 0.80,
-  run: 0.90,
-  octave: 0.90,
-  slide: 0.85,
-  minor: 0.80,
-  soft: 0.75
-}[bassStyle] || 0.80;
+  slow: 0.80,
+  pulse: 0.72,
+  bounce: 0.68,
+  run: 0.78,
+  octave: 0.78,
+  slide: 0.72,
+  minor: 0.65,
+  soft: 0.60
+}[bassStyle] || 0.68;
 
 // random skip for groove space
 if (Math.random() > playChance) return;
@@ -1201,10 +1328,34 @@ if (Math.random() > playChance) return;
   const gain = audioCtx.createGain();
 
   osc.type = "sawtooth";
+  const approachSteps = [3, 7];
+
+  const shouldSlide =
+    bassStyle === "slide" &&
+    approachSteps.includes(step) &&
+    !isGhost &&
+    Math.random() < 0.45;
+  const shouldOctaveJump =
+  (bassStyle === "octave" || profile.groove === "triumphant") &&
+  !isGhost &&
+  (step === 3 || step === 7);
+
+  if (shouldSlide) {
+  glideOscillator(osc, freq * 0.85, freq, 0.10);
+  } else if (shouldOctaveJump) {
+  osc.frequency.value = freq * 2;
+  } else {
   osc.frequency.value = freq;
+}
 
   subOsc.type = "sine";
+  if (shouldSlide) {
+  glideOscillator(subOsc, (freq / 2) * 0.85, freq / 2, 0.08);
+  } else if (shouldOctaveJump) {
+  subOsc.frequency.value = freq;
+  } else {
   subOsc.frequency.value = freq / 2;
+}
 
   filter.type = "lowpass";
   filter.frequency.value = isGhost ? 110 : 180;
@@ -1224,7 +1375,8 @@ if (Math.random() > playChance) return;
 const duration = isGhost ? 0.08 : holdTime;
 
 gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
-gain.gain.linearRampToValueAtTime(isGhost ? 0.06 : 0.42, audioCtx.currentTime + 0.01);
+const mainBassVolume = shouldOctaveJump ? 0.50 : 0.42;
+gain.gain.linearRampToValueAtTime(isGhost ? 0.06 : mainBassVolume, audioCtx.currentTime + 0.01);
 gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
 
 osc.connect(filter);
@@ -1232,14 +1384,23 @@ subOsc.connect(filter);
 filter.connect(gain);
 gain.connect(audioCtx.destination);
 
-osc.start();
-subOsc.start();
+let bassPush = 0;
 
-osc.stop(audioCtx.currentTime + duration);
-subOsc.stop(audioCtx.currentTime + duration);
+if (profile.groove === "uplift" || profile.groove === "warm") {
+  bassPush = -0.01;
+}
+
+osc.start(audioCtx.currentTime + bassPush);
+subOsc.start(audioCtx.currentTime + bassPush);
+
+osc.stop(audioCtx.currentTime + bassPush + duration);
+subOsc.stop(audioCtx.currentTime + bassPush + duration);
+bassJustPlayed = true;
 }
 
 function playChord(step) {
+  // avoid stepping on bass
+  if (bassJustPlayed && Math.random() > 0.4) return;
   if (selectedEmotions.length < 2) return;
 
   const profile = getActiveEmotionProfile();
@@ -1256,7 +1417,8 @@ function playChord(step) {
     dark: [2],
     brooding: [2],
     mysterious: [3],
-    warm: [2, 6]
+    warm: [2, 6],
+    soft: [2, 6]
   };
 
   const activeSteps = chordStepsByGroove[profile.groove] || [2, 6];
@@ -1270,27 +1432,29 @@ function playChord(step) {
   if (freqs.length < 2) return;
 
   const chordPlayChance = {
-    uplift: 0.90,
-    driving: 0.85,
-    triumphant: 0.95,
-    tense: 0.70,
-    dark: 0.65,
-    brooding: 0.60,
-    mysterious: 0.55,
-    warm: 0.80
-  }[profile.groove] || 0.80;
+    uplift: 0.75,
+    driving: 0.65,
+    triumphant: 0.80,
+    tense: 0.50,
+    dark: 0.35,
+    brooding: 0.30,
+    mysterious: 0.28,
+    warm: 0.55,
+    soft: 0.45
+}[profile.groove] || 0.50;
 
   if (Math.random() > chordPlayChance) return;
 
   const sustainByGroove = {
-    uplift: isTriad ? 0.34 : 0.20,
-    driving: isTriad ? 0.26 : 0.18,
-    triumphant: isTriad ? 0.46 : 0.24,
+    uplift: isTriad ? 0.24 : 0.18,
+    driving: isTriad ? 0.20 : 0.16,
+    triumphant: isTriad ? 0.28 : 0.20,
     tense: isTriad ? 0.18 : 0.14,
     dark: isTriad ? 0.55 : 0.26,
     brooding: isTriad ? 0.65 : 0.32,
     mysterious: isTriad ? 0.42 : 0.20,
-    warm: isTriad ? 0.72 : 0.36
+    warm: isTriad ? 0.78 : 0.40,
+    soft: isTriad ? 0.72 : 0.36
   }[profile.groove] || (isTriad ? 0.42 : 0.22);
 
   const volumeByGroove = {
@@ -1301,99 +1465,324 @@ function playChord(step) {
     dark: isTriad ? 0.18 : 0.10,
     brooding: isTriad ? 0.17 : 0.09,
     mysterious: isTriad ? 0.16 : 0.09,
-    warm: isTriad ? 0.20 : 0.11
+    warm: isTriad ? 0.20 : 0.11,
+    soft: isTriad ? 0.18 : 0.10
   }[profile.groove] || (isTriad ? 0.24 : 0.14);
 
   const gain = audioCtx.createGain();
   gain.gain.setValueAtTime(0.001, audioCtx.currentTime);
-  gain.gain.linearRampToValueAtTime(volumeByGroove, audioCtx.currentTime + 0.02);
+  gain.gain.linearRampToValueAtTime(volumeByGroove, audioCtx.currentTime + 0.01);
   gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + sustainByGroove);
   gain.connect(audioCtx.destination);
 
-  // dyads = lower stab
-  if (!isTriad) {
-    freqs.forEach(freq => {
-      const osc = audioCtx.createOscillator();
-      osc.type = profile.groove === "tense" ? "square" : "triangle";
-      osc.frequency.value = freq / 2;
-      osc.connect(gain);
-      osc.start();
-      osc.stop(audioCtx.currentTime + sustainByGroove);
-    });
-    return;
+  let voicedFreqs = [...freqs];
+
+  // spread + inversion
+  if (isTriad) {
+    if (profile.groove === "triumphant" || profile.groove === "uplift") {
+      // open voicing
+      voicedFreqs = [freqs[0] / 2, freqs[1], freqs[2]];
+    } else if (profile.groove === "dark" || profile.groove === "brooding") {
+      // low clustered voicing
+      voicedFreqs = [freqs[0] / 2, freqs[1] / 2, freqs[2] / 2];
+    } else if (profile.groove === "mysterious") {
+      // second inversion-ish feel
+      voicedFreqs = [freqs[1] / 2, freqs[2] / 2, freqs[0]];
+    } else if (profile.groove === "warm" || profile.groove === "soft") {
+      // gentle spread
+      voicedFreqs = [freqs[0] / 2, freqs[1] / 2, freqs[2]];
+    } else if (profile.groove === "tense") {
+      // tighter, midrange stab
+      voicedFreqs = [freqs[0] / 2, freqs[1] / 2, freqs[2] / 2];
+    } else {
+      voicedFreqs = [freqs[0] / 2, freqs[1] / 2, freqs[2]];
+    }
+  } else {
+    if (profile.groove === "warm" || profile.groove === "soft") {
+      voicedFreqs = [freqs[0] / 2, freqs[1]];
+    } else if (profile.groove === "dark" || profile.groove === "brooding") {
+      voicedFreqs = [freqs[0] / 2, freqs[1] / 2];
+    } else {
+      voicedFreqs = [freqs[0] / 2, freqs[1] / 2];
+    }
   }
 
-  // triads = fuller chord with top voice
-  freqs.forEach((freq, i) => {
-    const osc = audioCtx.createOscillator();
+  voicedFreqs.forEach((freq, i) => {
+  const osc = audioCtx.createOscillator();
 
-    if (profile.groove === "dark" || profile.groove === "brooding") {
-      osc.type = i === 2 ? "triangle" : "sawtooth";
-    } else if (profile.groove === "triumphant" || profile.groove === "uplift") {
-      osc.type = i === 2 ? "sine" : "triangle";
-    } else if (profile.groove === "tense") {
-      osc.type = "square";
-    } else {
-      osc.type = i === 2 ? "sine" : "triangle";
-    }
+  if (profile.groove === "dark" || profile.groove === "brooding") {
+    osc.type = i === voicedFreqs.length - 1 ? "triangle" : "sawtooth";
+  } else if (profile.groove === "triumphant" || profile.groove === "uplift") {
+    osc.type = i === voicedFreqs.length - 1 ? "sine" : "triangle";
+  } else if (profile.groove === "tense") {
+    osc.type = "square";
+  } else if (profile.groove === "warm" || profile.groove === "soft") {
+    osc.type = "sine";
+  } else {
+    osc.type = i === voicedFreqs.length - 1 ? "sine" : "triangle";
+  }
 
-    osc.frequency.value = i === 2 ? freq : freq / 2;
-    osc.connect(gain);
-    osc.start();
-    osc.stop(audioCtx.currentTime + sustainByGroove);
-  });
-}
+  osc.frequency.value = freq;
+  if (profile.groove === "warm" || profile.groove === "soft" || profile.groove === "brooding") {
+    osc.detune.value = i === 0 ? -4 : i === 1 ? 3 : 6;
+  } else if (profile.groove === "mysterious") {
+    osc.detune.value = i === 0 ? -2 : i === 1 ? 5 : -7;
+  } else if (profile.groove === "triumphant" || profile.groove === "uplift") {
+    osc.detune.value = i === 0 ? -1 : i === 1 ? 2 : 4;
+  }
+  osc.connect(gain);
 
-function playKick(step) {
-  if (step !== 0 && step !== 4) return;
-  playSample(kickSample, 0.45);
-}
-
-function playSnare(step) {
-  const accentMap = {
-    2: 0.42,
-    6: 0.50,
-    3: 0.16,
-    5: 0.12
+  const staggerByGroove = {
+    uplift: 0.012,
+    driving: 0.008,
+    triumphant: 0.015,
+    tense: 0.004,
+    dark: 0.020,
+    brooding: 0.024,
+    mysterious: 0.018,
+    warm: 0.028,
+    soft: 0.022
   };
 
-  const volume = accentMap[step];
-  if (!volume) return;
+  const stagger = (staggerByGroove[profile.groove] || 0.01) * i;
+  let push = 0;
 
-  playSample(snareSample, volume);
+  if (profile.groove === "uplift" || profile.groove === "warm") {
+    push = -0.012; // slightly early
+  }
+
+  const startTime = audioCtx.currentTime + stagger + push;
+  const stopTime = startTime + sustainByGroove;
+
+  osc.start(startTime);
+  osc.stop(stopTime);
+});
+if (
+  (profile.groove === "uplift" || profile.groove === "warm") &&
+  Math.random() < 0.35
+) {
+  const echoDelay = 0.08;
+
+  voicedFreqs.forEach((freq, i) => {
+    const osc = audioCtx.createOscillator();
+
+    osc.type = "triangle";
+    osc.frequency.value = freq;
+
+    const echoGain = audioCtx.createGain();
+    echoGain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+    echoGain.gain.linearRampToValueAtTime(0.12, audioCtx.currentTime + echoDelay);
+    echoGain.gain.exponentialRampToValueAtTime(
+      0.001,
+      audioCtx.currentTime + echoDelay + 0.18
+    );
+
+    osc.connect(echoGain);
+    echoGain.connect(audioCtx.destination);
+
+    osc.start(audioCtx.currentTime + echoDelay);
+    osc.stop(audioCtx.currentTime + echoDelay + 0.18);
+  });
+}
 }
 
-function playHat(step) {
+function playSpaceTone(step) {
   const profile = getActiveEmotionProfile();
   if (!profile) return;
 
-  const groove = grooveProfiles[profile.groove];
-  const stepIndex = step % 8;
+  // only these grooves get space
+  if (!["dark", "brooding", "mysterious", "warm"].includes(profile.groove)) return;
 
-  if (!groove.hatPattern[stepIndex]) return;
+  // only on phrase anchors
+  if (![0, 4].includes(step)) return;
 
-  const accentMap = {
-    1: 0.16,
-    3: 0.09,
-    5: 0.12,
-    7: 0.20
+  // not every time
+  const chanceByGroove = {
+    dark: 0.45,
+    brooding: 0.55,
+    mysterious: 0.40,
+    warm: 0.35
   };
 
-  const volume = accentMap[stepIndex] || 0.08;
-  playSample(hatSample, volume);
+  if (Math.random() > (chanceByGroove[profile.groove] || 0.4)) return;
+
+  const freqs = selectedEmotions
+    .map(id => emotionFreqs[id])
+    .filter(Boolean)
+    .sort((a, b) => a - b);
+
+  if (freqs.length === 0) return;
+
+  // Newton-consistent: root + fifth (+ octave implication)
+  const root = freqs[0] / 2;
+  const fifth = root * 1.5;
+
+  const osc1 = audioCtx.createOscillator();
+  const osc2 = audioCtx.createOscillator();
+  const filter = audioCtx.createBiquadFilter();
+  const gain = audioCtx.createGain();
+
+  osc1.type = "sine";
+  osc2.type = profile.groove === "mysterious" ? "triangle" : "sine";
+
+  osc1.frequency.value = root;
+  osc2.frequency.value = fifth;
+
+  filter.type = "lowpass";
+  filter.frequency.value = profile.groove === "dark" ? 240 : 380;
+  filter.Q.value = 0.8;
+
+  const durationByGroove = {
+    dark: 3.0,
+    brooding: 3.0,
+    mysterious: 2.5,
+    warm: 2.3
+  };
+
+  const volumeByGroove = {
+    dark: 0.1,
+    brooding: 0.055,
+    mysterious: 0.1,
+    warm: 0.055
+  };
+
+  const duration = durationByGroove[profile.groove] || 2.5;
+  const volume = volumeByGroove[profile.groove] || 0.1;
+
+  gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+  gain.gain.linearRampToValueAtTime(volume, audioCtx.currentTime + 0.08);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+
+  osc1.connect(filter);
+  osc2.connect(filter);
+  filter.connect(gain);
+  gain.connect(audioCtx.destination);
+
+  osc1.start();
+  osc2.start();
+
+  osc1.stop(audioCtx.currentTime + duration);
+  osc2.stop(audioCtx.currentTime + duration);
 }
+
+// ======================
+// CONTROL (BRIDGE)
+// ======================
+
+function handleEmotionClick(emotionId) {
+    initAudio();
+  const selectedButton = document.querySelector(`[data-emotion-id="${emotionId}"]`);
+
+  // Toggle OFF if already selected
+  if (selectedEmotions.includes(emotionId)) {
+    selectedEmotions = selectedEmotions.filter(id => id !== emotionId);
+
+    if (selectedButton) {
+      selectedButton.classList.remove("selected");
+      selectedButton.style.background = "";
+      selectedButton.style.color = "";
+    }
+
+    updateStatus();
+    updateButtonStates();
+    startGroove();
+    if (selectedEmotions.length === 2) {
+      showDyadResult();
+    } else if (selectedEmotions.length === 1 || selectedEmotions.length === 0) {
+      resetResult();
+    }
+
+    return;
+  }
+
+  // prevent more than 3 emotions
+  if (selectedEmotions.length === 3) {
+    const removed = selectedEmotions.shift();
+    const removedButton = document.querySelector(`[data-emotion-id="${removed}"]`);
+    if (removedButton) {
+      removedButton.classList.remove("selected");
+      removedButton.style.background = "";
+      removedButton.style.color = "";
+    }
+  }
+
+  selectedEmotions.push(emotionId);
+
+  if (selectedButton) {
+    selectedButton.classList.add("selected");
+    selectedButton.style.background = selectedButton.dataset.color;
+    selectedButton.style.color = "#111";
+  }
 
   updateStatus();
+  updateButtonStates();
+  startGroove();
 
-  if (selectedEmotions.length >= 2) {
-  showDyadResult();
-} else {
-  resetResult();
+  if (selectedEmotions.length === 2) {
+    showDyadResult();
+  } else if (selectedEmotions.length === 3) {
+    showTriadResult();
+  }
+}
+
+//==================== */
+// END CORE ENGINE
+//==================== */
+
+// ======================
+// UI DATA
+// ======================
+const emotionColors = {
+  power: "#FF5A5F",
+  anticipation: "#FF9F1C",
+  joy: "#FFD84D",
+  trust: "#4ADE80",
+  fear: "#38BDF8",
+  surprise: "#A78BFA",
+  sadness: "#5B6CFF",
+  disgust: "#8B5CF6"
+};
+
+function getTriadColors(ids) {
+  return ids.map(id => emotionColors[id]);
 }
 
 
+// ======================
+// DOM REFERENCES
+// ======================
+const buttonsContainer = document.getElementById("emotion-buttons");
+const statusEl = document.getElementById("status");
+const resultEl = document.getElementById("result");
+const resetButton = document.getElementById("reset-button");
 
-    function updateStatus() {
+// ======================
+// UI RENDERING
+// ======================
+function renderEmotionButtons() {
+  buttonsContainer.innerHTML = "";
+
+  emotions.forEach((emotion) => {
+    const button = document.createElement("button");
+    button.textContent = emotion.label;
+    button.dataset.emotionId = emotion.id;
+    button.dataset.color = emotion.color;
+    button.classList.add("emotion-btn");
+    button.addEventListener("click", () => handleEmotionClick(emotion.id));
+    buttonsContainer.appendChild(button);
+  });
+}
+
+function getEmotionLabel(emotionId) {
+  const emotion = emotions.find((e) => e.id === emotionId);
+  return emotion ? emotion.label : emotionId;
+}
+
+
+// ======================
+// STATUS / RESULT DISPLAY
+// ======================
+function updateStatus() {
   if (selectedEmotions.length === 0) {
     statusEl.textContent = "Select up to 3 primary emotions";
   } else if (selectedEmotions.length === 1) {
@@ -1408,35 +1797,38 @@ function playHat(step) {
   }
 }
 
-    function showDyadResult() {
-      const [a, b] = selectedEmotions;
-      const key = makeDyadKey(a, b);
-      const dyad = dyads[key];
+function showDyadResult() {
+  const [a, b] = selectedEmotions;
+  const key = makeDyadKey(a, b);
+  const dyad = dyads[key];
 
-      if (!dyad) {
-        resultEl.innerHTML = `
-          <div class="dyad-name">Unknown</div>
-          <div class="dyad-meta">${getEmotionLabel(a)} + ${getEmotionLabel(b)}</div>
-          <div class="dyad-description">No dyad mapping exists yet for this combination.</div>
-        `;
-        document.body.style.background = "#111";
-        return;
-      }
+  if (!dyad) {
+    resultEl.innerHTML = `
+      <div class="dyad-name">Unknown</div>
+      <div class="dyad-meta">${getEmotionLabel(a)} + ${getEmotionLabel(b)}</div>
+      <div class="dyad-description">No dyad mapping exists yet for this combination.</div>
+    `;
+    resultEl.style.background = "rgba(255,255,255,0.06)";
+    animateResult();
+    return;
+  }
 
-      resultEl.innerHTML = `
-        <div class="dyad-name">${dyad.name}</div>
-        <div class="dyad-meta">${dyad.primaries.join(" + ")}</div>
-        <div class="dyad-description">${dyad.description}</div>
-      `;
+  resultEl.innerHTML = `
+    <div class="dyad-name">${dyad.name}</div>
+    <div class="dyad-meta">${dyad.primaries.join(" + ")}</div>
+    <div class="dyad-description">${dyad.description}</div>
+  `;
 
-      if (dyad.colors) {
-       resultEl.style.background = `linear-gradient(135deg, ${dyad.colors[0]}, ${dyad.colors[1]})`;
-      }
+  if (dyad.colors) {
+    resultEl.style.background = `linear-gradient(135deg, ${dyad.colors[0]}, ${dyad.colors[1]})`;
+  } else {
+    resultEl.style.background = "rgba(255,255,255,0.06)";
+  }
 
-      animateResult();
-    }
+  animateResult();
+}
 
-    function showTriadResult() {
+function showTriadResult() {
   const key = makeTriadKey(selectedEmotions);
   const triad = triads[key];
 
@@ -1446,6 +1838,8 @@ function playHat(step) {
       <div class="dyad-meta">${selectedEmotions.map(getEmotionLabel).join(" + ")}</div>
       <div class="dyad-description">No triad mapping exists yet for this combination.</div>
     `;
+    resultEl.style.background = "rgba(255,255,255,0.06)";
+    animateResult();
     return;
   }
 
@@ -1458,8 +1852,8 @@ function playHat(step) {
     <div class="dyad-description">${triad.description || ""}</div>
   `;
 
-  resultEl.style.background =
-    `linear-gradient(135deg, ${colors[0]}, ${colors[1]}, ${colors[2]})`;
+  resultEl.style.background = `linear-gradient(135deg, ${colors[0]}, ${colors[1]}, ${colors[2]})`;
+  animateResult();
 }
 
 function resetResult() {
@@ -1473,13 +1867,14 @@ function resetResult() {
 
 function animateResult() {
   resultEl.classList.remove("result-pop");
-
-  // force reflow so the animation can retrigger every time
   void resultEl.offsetWidth;
-
   resultEl.classList.add("result-pop");
 }
 
+
+// ======================
+// UI STATE HELPERS
+// ======================
 function updateButtonStates() {
   document.querySelectorAll(".emotion-btn").forEach(btn => {
     btn.classList.remove("dimmed");
@@ -1488,12 +1883,13 @@ function updateButtonStates() {
 
 function resetApp() {
   selectedEmotions = [];
+
+  if (grooveInterval) {
+    clearTimeout(grooveInterval);
+  }
+
   updateStatus();
-  if (grooveInterval) clearTimeout(grooveInterval);
-
   resetResult();
-
-  resultEl.style.background = "rgba(255,255,255,0.06)";
 
   document.querySelectorAll(".emotion-btn").forEach(btn => {
     btn.classList.remove("selected");
@@ -1501,29 +1897,17 @@ function resetApp() {
     btn.style.color = "";
   });
 
-  const engineStatusEl = document.getElementById("engine-status");
-  if (engineStatusEl) {
-    engineStatusEl.textContent = "Engine: Idle";
-  }
-
   updateButtonStates();
 }
 
-function getEmotionLabel(emotionId) {
-      const emotion = emotions.find((e) => e.id === emotionId);
-      return emotion ? emotion.label : emotionId;
-    }
 
-resetButton.addEventListener("click", resetApp);
-renderEmotionButtons();
-    updateStatus();
-
- const startBtn = document.getElementById("startBtn");
- const engineStatusEl = document.getElementById("engine-status");
-
-if (startBtn) {
-  startBtn.addEventListener("click", () => {
-    engineStatusEl.textContent = "Engine: Started";
-    console.log("Start Engine clicked");
-  });
+// ======================
+// APP INIT / EVENT WIRING
+// ======================
+if (resetButton) {
+  resetButton.addEventListener("click", resetApp);
 }
+
+renderEmotionButtons();
+updateStatus();
+resetResult();
