@@ -41,6 +41,8 @@ let shakerSample;
 let openHatSample;
 let selectedEmotions = [];
 let stepEmitter = null;
+let lastKickHit = false;
+let lastSnareHit = false;
 
 // ======================
 // MAPPING / DATA
@@ -891,11 +893,15 @@ function tick() {
   const stepIndex = phraseStep % 8;
   const isSecondBar = phraseStep >= 8;
   const evo = getEvolutionState();
+  const tickTime = audioCtx.currentTime + 0.02;
 
   // DRUMS
   if (groove.kickPattern[stepIndex]) playKick(stepIndex);
   if (groove.snarePattern[stepIndex]) playSnare(stepIndex);
   if (groove.hatPattern[stepIndex]) playHat(stepIndex);
+
+  lastKickHit = !!groove.kickPattern[stepIndex];
+  lastSnareHit = !!groove.snarePattern[stepIndex];
 
   playShaker(stepIndex);
   playOpenHat(stepIndex);
@@ -945,11 +951,24 @@ function tick() {
     }
   }
 
+  // micro fill (end of bar)
+  if (stepIndex === 7 && Math.random() < 0.4) {
+    if (profile.groove === "driving" || profile.groove === "uplift") {
+      playSnare(5);
+      playSnare(7);
+    }
+
+    if (profile.groove === "tense" || profile.groove === "mysterious") {
+      playHat(6);
+      playSnare(7);
+  }
+}
+
   // MUSIC
-  playBass(stepIndex);
+  playBass(stepIndex, tickTime);
 
   if (selectedEmotions.length >= 2) {
-    playChord(stepIndex);
+    playChord(stepIndex, tickTime);
   }
 
   const swing = stepIndex % 2 ? 1.6 : 0.75;
@@ -963,16 +982,18 @@ function tick() {
   if (phraseStep === 0) {
     barCount++;
   }
-
-  grooveInterval = setTimeout(tick, delay);
-  if (typeof stepEmitter === "function") {
+  // emit step BEFORE scheduling next tick
+if (typeof stepEmitter === "function") {
   stepEmitter({
     step: stepIndex,
-    profile,
+    profile: groove,
     phraseStep,
     barCount
   });
 }
+
+grooveInterval = setTimeout(tick, delay);
+
 }
 
 // ======================
@@ -988,8 +1009,20 @@ function playKick(step) {
     7: 0.18
   };
 
-  const volume = accentMap[step];
+  let volume = accentMap[step];
   if (!volume) return;
+
+  const profile = getActiveEmotionProfile();
+  if (!profile) return;
+
+  if (
+    (profile.groove === "driving" || profile.groove === "uplift" || profile.groove === "triumphant") &&
+    (step === 2 || step === 6 || step === 7)
+  ) {
+    if (Math.random() < 0.7) {
+      volume *= 0.88;
+    }
+  }
 
   playSample(kickSample, volume);
 }
@@ -1003,8 +1036,20 @@ function playSnare(step) {
     7: 0.22
   };
 
-  const volume = accentMap[step];
+  let volume = accentMap[step];
   if (!volume) return;
+
+  const profile = getActiveEmotionProfile();
+  if (!profile) return;
+
+  if (
+    (profile.groove === "driving" || profile.groove === "uplift" || profile.groove === "triumphant") &&
+    (step === 3 || step === 5)
+  ) {
+    if (Math.random() < 0.7) {
+      volume *= 0.85;
+    }
+  }
 
   playSample(snareSample, volume);
 }
@@ -1025,7 +1070,22 @@ function playHat(step) {
     7: 0.20
   };
 
-  const volume = accentMap[stepIndex] || 0.08;
+  let volume = accentMap[stepIndex] || 0.08;
+
+  // slight groove-based variation
+  if (profile.groove === "uplift" || profile.groove === "driving" || profile.groove === "triumphant") {
+    if (stepIndex % 2 === 1 && Math.random() < 0.6) {
+      volume *= 1.15;
+    }
+  }
+
+  // occasional drop for space
+  if (Math.random() < 0.05) return;
+
+  if (lastKickHit) {
+  volume *= 0.82;
+  }
+
   playSample(hatSample, volume);
 }
 
@@ -1054,7 +1114,8 @@ function playOpenHat(step) {
   if (!steps.includes(step)) return;
 
   // slight randomness so it's not repetitive
-  if (Math.random() > 0.7) return;
+  const openHatChance = lastSnareHit ? 0.5 : 0.3;
+  if (Math.random() > openHatChance) return;
 
   playSample(openHatSample, 0.35);
 }
@@ -1093,7 +1154,7 @@ function playShaker(step) {
   playSample(shakerSample, volume);
 }
 
-function playBass(step) {
+function playBass(step, tickTime) {
   bassJustPlayed = false;
   if (selectedEmotions.length === 0) return;
 
@@ -1123,8 +1184,24 @@ if (Math.random() > playChance) return;
     .map(id => (emotionFreqs[id] || 261.63) / 2)
     .sort((a, b) => a - b);
 
+  const approachMap = {
+    7: freqs[0] * 0.94387, // semitone below root → leads into step 0
+    3: freqs[0] * 1.05946  // semitone above root → leads into step 4
+  };
+
   let bassPattern = {};
-  let ghostSteps = [1, 6];
+  const ghostMap = {
+    driving: [1, 6],
+    uplift: [1],
+    triumphant: [6],
+    tense: [1, 3, 6],
+    brooding: [1],
+    dark: [],
+    warm: [6],
+    mysterious: [3]
+  };
+
+  let ghostSteps = ghostMap[profile.groove] || [1, 6];
 
   // 1 primary
   if (freqs.length === 1) {
@@ -1315,11 +1392,19 @@ if (Math.random() > playChance) return;
     }
   }
 
+  if (Math.random() < 0.85) {
+    bassPattern[0] = freqs[0];
+  }
+
   const isGhost = ghostSteps.includes(step);
   const allowGhost = (profile.energy || 3) >= 3;
   if (isGhost && !allowGhost) return;
   const ghostFreq = freqs[0] * 1.05946; // subtle tension note
-  const freq = bassPattern[step] || (isGhost ? ghostFreq : null);
+  const freq =
+    bassPattern[step] ||
+    (approachMap[step] && Math.random() < 0.6 ? approachMap[step] : null) ||
+    (isGhost ? ghostFreq : null);
+
   if (!freq) return;
 
   const osc = audioCtx.createOscillator();
@@ -1372,10 +1457,18 @@ if (Math.random() > playChance) return;
   soft: 0.40
 }[bassStyle] || 0.30;
 
-const duration = isGhost ? 0.08 : holdTime;
+const shortSteps = [1, 3, 6];
+const isShort = shortSteps.includes(step) && Math.random() < 0.6;
+
+const duration = isGhost
+  ? 0.08
+  : isShort
+    ? holdTime * 0.6
+    : holdTime;
 
 gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
-const mainBassVolume = shouldOctaveJump ? 0.50 : 0.42;
+const velocitySwing = (step % 2 === 0) ? 1.0 : 0.85;
+const mainBassVolume = (shouldOctaveJump ? 0.50 : 0.42) * velocitySwing;
 gain.gain.linearRampToValueAtTime(isGhost ? 0.06 : mainBassVolume, audioCtx.currentTime + 0.01);
 gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
 
@@ -1390,21 +1483,32 @@ if (profile.groove === "uplift" || profile.groove === "warm") {
   bassPush = -0.01;
 }
 
-osc.start(audioCtx.currentTime + bassPush);
-subOsc.start(audioCtx.currentTime + bassPush);
+osc.start(tickTime + bassPush);
+subOsc.start(tickTime + bassPush);
 
-osc.stop(audioCtx.currentTime + bassPush + duration);
-subOsc.stop(audioCtx.currentTime + bassPush + duration);
-bassJustPlayed = true;
+osc.stop(tickTime + bassPush + duration);
+subOsc.stop(tickTime + bassPush + duration);
 }
 
-function playChord(step) {
+function playChord(step, tickTime) {
   // avoid stepping on bass
-  if (bassJustPlayed && Math.random() > 0.4) return;
-  if (selectedEmotions.length < 2) return;
-
   const profile = getActiveEmotionProfile();
   if (!profile) return;
+
+const responseChanceByGroove = {
+  uplift: bassJustPlayed ? 0.35 : 0.75,
+  driving: bassJustPlayed ? 0.28 : 0.65,
+  triumphant: bassJustPlayed ? 0.32 : 0.80,
+  tense: bassJustPlayed ? 0.22 : 0.50,
+  dark: bassJustPlayed ? 0.18 : 0.35,
+  brooding: bassJustPlayed ? 0.20 : 0.30,
+  mysterious: bassJustPlayed ? 0.25 : 0.28,
+  warm: bassJustPlayed ? 0.45 : 0.55,
+  soft: bassJustPlayed ? 0.40 : 0.45
+};
+
+  if (Math.random() > (responseChanceByGroove[profile.groove] || 0.5)) return;
+  if (selectedEmotions.length < 2) return;
 
   const groove = grooveProfiles[profile.groove];
   const isTriad = selectedEmotions.length === 3;
@@ -1470,9 +1574,9 @@ function playChord(step) {
   }[profile.groove] || (isTriad ? 0.24 : 0.14);
 
   const gain = audioCtx.createGain();
-  gain.gain.setValueAtTime(0.001, audioCtx.currentTime);
-  gain.gain.linearRampToValueAtTime(volumeByGroove, audioCtx.currentTime + 0.01);
-  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + sustainByGroove);
+  gain.gain.setValueAtTime(0.001, tickTime);
+  gain.gain.linearRampToValueAtTime(volumeByGroove, tickTime + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.001, tickTime + sustainByGroove);
   gain.connect(audioCtx.destination);
 
   let voicedFreqs = [...freqs];
@@ -1551,7 +1655,7 @@ function playChord(step) {
     push = -0.012; // slightly early
   }
 
-  const startTime = audioCtx.currentTime + stagger + push;
+  const startTime = tickTime + stagger + push;
   const stopTime = startTime + sustainByGroove;
 
   osc.start(startTime);
@@ -1570,18 +1674,18 @@ if (
     osc.frequency.value = freq;
 
     const echoGain = audioCtx.createGain();
-    echoGain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
-    echoGain.gain.linearRampToValueAtTime(0.12, audioCtx.currentTime + echoDelay);
+    echoGain.gain.setValueAtTime(0.0001, tickTime);
+    echoGain.gain.linearRampToValueAtTime(0.12, tickTime + echoDelay);
     echoGain.gain.exponentialRampToValueAtTime(
       0.001,
-      audioCtx.currentTime + echoDelay + 0.18
+      tickTime + echoDelay + 0.18
     );
 
     osc.connect(echoGain);
     echoGain.connect(audioCtx.destination);
 
-    osc.start(audioCtx.currentTime + echoDelay);
-    osc.stop(audioCtx.currentTime + echoDelay + 0.18);
+    osc.start(tickTime + echoDelay);
+    osc.stop(tickTime + echoDelay + 0.18);
   });
 }
 }
@@ -1778,6 +1882,10 @@ function getEmotionLabel(emotionId) {
   return emotion ? emotion.label : emotionId;
 }
 
+// ======================
+// STEP VISUALS
+// ======================
+const TOTAL_STEPS = 8;
 
 // ======================
 // STATUS / RESULT DISPLAY
@@ -1908,6 +2016,117 @@ if (resetButton) {
   resetButton.addEventListener("click", resetApp);
 }
 
+setStepEmitter(({ step, profile }) => {
+});
+
 renderEmotionButtons();
 updateStatus();
 resetResult();
+
+const waveSvg = document.getElementById("emotion-waves");
+
+const primaryWavePresets = {
+  power: {
+    color: "#FF5A5F",
+    amplitude: 58,
+    wavelength: 280,
+    speed: 0.085
+  },
+  anticipation: {
+    color: "#FF9F1C",
+    amplitude: 42,
+    wavelength: 180,
+    speed: 0.095
+  },
+  joy: {
+    color: "#FFD84D",
+    amplitude: 50,
+    wavelength: 240,
+    speed: 0.08
+  },
+  trust: {
+    color: "#4ADE80",
+    amplitude: 34,
+    wavelength: 300,
+    speed: 0.045
+  },
+  fear: {
+    color: "#38BDF8",
+    amplitude: 24,
+    wavelength: 135,
+    speed: 0.11
+  },
+  surprise: {
+    color: "#A78BFA",
+    amplitude: 46,
+    wavelength: 145,
+    speed: 0.12
+  },
+  sadness: {
+    color: "#5B6CFF",
+    amplitude: 18,
+    wavelength: 340,
+    speed: 0.025
+  },
+  disgust: {
+    color: "#8B5CF6",
+    amplitude: 30,
+    wavelength: 165,
+    speed: 0.055
+  }
+};
+
+if (waveSvg) {
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+
+  waveSvg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+
+  function getCurrentWavePreset() {
+    const activeEmotion = selectedEmotions[0] || "joy";
+    return primaryWavePresets[activeEmotion] || primaryWavePresets.joy;
+  }
+
+  function buildWavePath(time) {
+    const preset = getCurrentWavePreset();
+    const amplitude = preset.amplitude;
+    const wavelength = preset.wavelength;
+    const baseline = height / 2;
+
+    let d = "";
+
+    for (let x = 0; x <= width; x += 20) {
+      const y =
+        baseline +
+        Math.sin((x / wavelength * Math.PI * 2) + time) * amplitude;
+
+      if (x === 0) {
+        d += `M ${x} ${y}`;
+      } else {
+        d += ` L ${x} ${y}`;
+      }
+    }
+
+    return d;
+  }
+
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute("fill", "none");
+  path.setAttribute("stroke", "rgba(255,255,255,0.4)");
+  path.setAttribute("stroke-width", "3");
+
+  waveSvg.innerHTML = "";
+  waveSvg.appendChild(path);
+
+  let time = 0;
+
+  function animate() {
+    const preset = getCurrentWavePreset();
+    time += preset.speed;
+    path.setAttribute("stroke", preset.color);
+    path.setAttribute("d", buildWavePath(time));
+    requestAnimationFrame(animate);
+  }
+
+  animate();
+}

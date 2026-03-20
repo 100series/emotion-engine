@@ -9,6 +9,10 @@
 </head>
 <body>
   <div class="app">
+    <div id="wave-field" aria-hidden="true">
+      <svg id="emotion-waves" preserveAspectRatio="none"></svg>
+    </div>
+    
     <h1>Emotion Engine</h1>
     <p>Interactive groove generator based on emotional states</p>
 
@@ -22,12 +26,10 @@
       <button class="reset-btn" id="reset-button">Reset</button>
     </div>
 
-    <div id="engine-status">Engine: Idle</div>
     <p class="intro">
-    Combine emotional states to generate rhythm and sound.
+      Combine emotional states to generate rhythm and sound.
     </p>
   </div>
-
 
   <script src="assets/js/script.js" defer></script>
 </body>

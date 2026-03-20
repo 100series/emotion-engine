@@ -193,3 +193,30 @@ button {
   margin: 14px auto 0;
   max-width: 600px;
 }
+
+/* --------------------------
+   WAVE FIELD (BACKGROUND LAYER)
+--------------------------- */
+
+#wave-field {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+#emotion-waves {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* --------------------------
+   MAKE UI SIT ABOVE WAVES
+--------------------------- */
+
+.app {
+  position: relative;
+  z-index: 1;
+}
