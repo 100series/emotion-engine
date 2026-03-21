@@ -45,6 +45,7 @@ let lastKickHit = false;
 let lastSnareHit = false;
 let bassMotif = null;
 let bassMotifBar = -1;
+let isDropoutStep = false;
 
 // ======================
 // MAPPING / DATA
@@ -922,19 +923,21 @@ function tick() {
   groove.kickPattern;
   const stepIndex = phraseStep % 8;
   const isSecondBar = phraseStep >= 8;
+  const isTwoBarTurn = phraseStep === 0 || phraseStep === 8;
   const evo = getEvolutionState();
   const tickTime = audioCtx.currentTime + 0.02;
+  isDropoutStep = evo.isBar4 && stepIndex === 0 && Math.random() < 0.35;
 
   // DRUMS
-  if (kickPattern[stepIndex]) playKick(stepIndex);
-  if (groove.snarePattern[stepIndex]) playSnare(stepIndex);
-  if (groove.hatPattern[stepIndex]) playHat(stepIndex);
+  if (!isDropoutStep) {
+    if (kickPattern[stepIndex]) playKick(stepIndex);
+    if (groove.snarePattern[stepIndex]) playSnare(stepIndex);
+    if (groove.hatPattern[stepIndex]) playHat(stepIndex);
 
-  lastKickHit = !!kickPattern[stepIndex];
-  lastSnareHit = !!groove.snarePattern[stepIndex];
+    playShaker(stepIndex);
+    playOpenHat(stepIndex);
+  }
 
-  playShaker(stepIndex);
-  playOpenHat(stepIndex);
   playSpaceTone(stepIndex);
 
   // 2-bar variation
@@ -949,6 +952,20 @@ function tick() {
 
     if (profile.groove === "mysterious" || profile.groove === "tense") {
       if (stepIndex === 3 && Math.random() < 0.45) playSnare(3);
+    }
+  }
+
+  if (isTwoBarTurn && Math.random() < 0.45) {
+    if (profile.groove === "driving" || profile.groove === "uplift" || profile.groove === "triumphant") {
+      playHat(7);
+    }
+
+    if (profile.groove === "warm" || profile.groove === "soft") {
+      playOpenHat(7);
+    }
+
+    if (profile.groove === "tense" || profile.groove === "mysterious") {
+      playSnare(7);
     }
   }
 
@@ -995,10 +1012,12 @@ function tick() {
 }
 
   // MUSIC
-  playBass(stepIndex, tickTime);
+  if (!isDropoutStep) {
+    playBass(stepIndex, tickTime);
 
-  if (selectedEmotions.length >= 2) {
-    playChord(stepIndex, tickTime);
+    if (selectedEmotions.length >= 2) {
+      playChord(stepIndex, tickTime);
+    }
   }
 
   const swing = stepIndex % 2 ? 1.6 : 0.75;
@@ -1072,14 +1091,25 @@ function playSnare(step) {
   const profile = getActiveEmotionProfile();
   if (!profile) return;
 
-  if (
-    (profile.groove === "driving" || profile.groove === "uplift" || profile.groove === "triumphant") &&
-    (step === 3 || step === 5)
-  ) {
-    if (Math.random() < 0.7) {
-      volume *= 0.85;
-    }
+  if (step === 3 || step === 5) {
+  const ghostChanceByGroove = {
+    driving: 0.8,
+    uplift: 0.75,
+    triumphant: 0.7,
+    warm: 0.55,
+    tense: 0.45,
+    mysterious: 0.35,
+    brooding: 0.3,
+    dark: 0.2,
+    soft: 0.4
+  };
+
+  const ghostChance = ghostChanceByGroove[profile.groove] || 0.5;
+
+  if (Math.random() < ghostChance) {
+    volume *= step === 3 ? 0.72 : 0.82;
   }
+}
 
   playSample(snareSample, volume);
 }
@@ -1518,9 +1548,23 @@ if (Math.random() > playChance) return;
   }
 
   const ghostFreq = freqs[0] * 1.05946; // subtle tension note
+  const anticipationChanceByGroove = {
+    driving: 0.72,
+    uplift: 0.68,
+    triumphant: 0.62,
+    warm: 0.5,
+    tense: 0.58,
+    mysterious: 0.45,
+    brooding: 0.35,
+    dark: 0.28,
+    soft: 0.4
+  };
+
+  const anticipationChance = anticipationChanceByGroove[profile.groove] || 0.5;
+
   const freq =
     bassPattern[step] ||
-    (approachMap[step] && Math.random() < 0.6 ? approachMap[step] : null) ||
+    (approachMap[step] && Math.random() < anticipationChance ? approachMap[step] : null) ||
     (isGhost ? ghostFreq : null);
 
   if (!freq) return;
