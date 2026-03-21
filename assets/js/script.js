@@ -43,6 +43,8 @@ let selectedEmotions = [];
 let stepEmitter = null;
 let lastKickHit = false;
 let lastSnareHit = false;
+let bassMotif = null;
+let bassMotifBar = -1;
 
 // ======================
 // MAPPING / DATA
@@ -56,6 +58,11 @@ const grooveProfiles = {
 
   uplift: {
     kickPattern: [1,0,0,0,1,0,0,0],
+    kickVariants: [
+      [1,0,0,0,1,0,0,0], // base
+      [1,0,0,0,1,0,1,0], // late lift
+      [1,0,0,1,1,0,0,0]  // mid push
+    ],
     snarePattern: [0,0,1,0,0,0,1,0],
     hatPattern: [1,1,1,1,1,1,1,1],
     bassStyle: "bounce"
@@ -63,6 +70,11 @@ const grooveProfiles = {
 
   driving: {
     kickPattern: [1,0,1,0,1,0,0,0],
+    kickVariants: [
+      [1,0,1,0,1,0,0,0], // base
+      [1,0,0,1,1,0,0,0], // pushes into mid-bar
+      [1,0,1,0,0,1,0,0]  // late support hit
+    ],
     snarePattern: [0,0,1,0,0,0,1,0],
     hatPattern: [1,1,1,1,1,1,1,1],
     bassStyle: "run"
@@ -70,6 +82,11 @@ const grooveProfiles = {
 
   triumphant: {
     kickPattern: [1,0,0,1,1,0,0,1],
+    kickVariants: [
+      [1,0,0,1,1,0,0,1], // base
+      [1,0,0,1,0,1,0,1], // rolling push
+      [1,0,0,0,1,0,1,1]  // late drive
+  ],
     snarePattern: [0,0,1,0,0,0,1,0],
     hatPattern: [1,1,1,1,1,1,1,1],
     bassStyle: "octave"
@@ -77,6 +94,11 @@ const grooveProfiles = {
 
   tense: {
     kickPattern: [1,0,0,0,0,1,0,0],
+    kickVariants: [
+      [1,0,0,0,0,1,0,0], // base
+      [1,0,0,1,0,1,0,0], // uneasy push
+      [1,0,0,0,0,1,1,0]  // tightening late hit
+  ],
     snarePattern: [0,0,1,0,0,0,1,0],
     hatPattern: [1,0,1,0,1,0,1,0],
     bassStyle: "pulse"
@@ -105,6 +127,11 @@ const grooveProfiles = {
 
   warm: {
     kickPattern: [1,0,0,0,1,0,0,0],
+    kickVariants: [
+      [1,0,0,0,1,0,0,0], // base
+      [1,0,0,0,1,0,1,0], // gentle late lift
+      [1,0,0,1,1,0,0,0]  // soft mid push
+  ],
     snarePattern: [0,0,1,0,0,0,1,0],
     hatPattern: [1,1,0,1,1,1,0,1],
     bassStyle: "soft"
@@ -890,17 +917,20 @@ function tick() {
   if (!profile) return;
 
   const groove = grooveProfiles[profile.groove];
+  const kickPattern =
+  groove.kickVariants?.[barCount % groove.kickVariants.length] ||
+  groove.kickPattern;
   const stepIndex = phraseStep % 8;
   const isSecondBar = phraseStep >= 8;
   const evo = getEvolutionState();
   const tickTime = audioCtx.currentTime + 0.02;
 
   // DRUMS
-  if (groove.kickPattern[stepIndex]) playKick(stepIndex);
+  if (kickPattern[stepIndex]) playKick(stepIndex);
   if (groove.snarePattern[stepIndex]) playSnare(stepIndex);
   if (groove.hatPattern[stepIndex]) playHat(stepIndex);
 
-  lastKickHit = !!groove.kickPattern[stepIndex];
+  lastKickHit = !!kickPattern[stepIndex];
   lastSnareHit = !!groove.snarePattern[stepIndex];
 
   playShaker(stepIndex);
@@ -972,7 +1002,7 @@ function tick() {
   }
 
   const swing = stepIndex % 2 ? 1.6 : 0.75;
-  const humanize = (Math.random() - 0.5) * 18;
+  const humanize = (Math.random() - 0.5) * 12;
 
   const baseDelay = 120;
   const delay = (baseDelay * swing) + humanize;
@@ -1165,12 +1195,31 @@ function playBass(step, tickTime) {
   const bassStyle = groove.bassStyle || "bounce";
   const energy = profile.energy || 3;
 
+  const currentMotifBar = Math.floor(barCount / 2);
+
+  if (!bassMotif || bassMotifBar !== currentMotifBar) {
+    const motifChoicesByStyle = {
+      bounce: ["rootHop", "partnerAnswer"],
+      run: ["walkUp", "stagger"],
+      octave: ["octavePunch", "rootHop"],
+      pulse: ["pulseGate", "rootHold"],
+      slow: ["rootHold"],
+      slide: ["slideLead", "partnerAnswer"],
+      minor: ["darkFall", "rootHold"],
+      soft: ["softStep", "rootHold"]
+    };
+
+  const choices = motifChoicesByStyle[bassStyle] || ["rootHop"];
+  bassMotif = choices[Math.floor(Math.random() * choices.length)];
+  bassMotifBar = currentMotifBar;
+  }
+
 // probability the note actually plays
 const playChance = {
-  slow: 0.80,
-  pulse: 0.72,
-  bounce: 0.68,
-  run: 0.78,
+  slow: 0.75,
+  pulse: 0.68,
+  bounce: 0.64,
+  run: 0.74,
   octave: 0.78,
   slide: 0.72,
   minor: 0.65,
@@ -1190,6 +1239,7 @@ if (Math.random() > playChance) return;
   };
 
   let bassPattern = {};
+  const motif = bassMotif;
   const ghostMap = {
     driving: [1, 6],
     uplift: [1],
@@ -1199,6 +1249,18 @@ if (Math.random() > playChance) return;
     dark: [],
     warm: [6],
     mysterious: [3]
+  };
+
+  const restMap = {
+  driving: [1],
+  uplift: [1],
+  triumphant: [6],
+  tense: [1, 3],
+  brooding: [3],
+  dark: [1, 3, 6],
+  warm: [1],
+  mysterious: [3],
+  soft: [1]
   };
 
   let ghostSteps = ghostMap[profile.groove] || [1, 6];
@@ -1256,13 +1318,29 @@ if (Math.random() > playChance) return;
         7: root * 1.33484
       };
     } else {
-      // bounce
-      bassPattern = {
-        0: root,
-        3: root * 1.12246,
-        5: root,
-        7: root * 1.25992
-      };
+        // bounce
+        if (motif === "partnerAnswer") {
+          bassPattern = {
+            0: root,
+            3: root * 1.12246,
+            5: root * 1.25992,
+            7: root
+          };
+        } else if (motif === "rootHop") {
+          bassPattern = {
+            0: root,
+            3: root,
+            5: root * 1.12246,
+            7: root * 1.25992
+          };
+        } else {
+          bassPattern = {
+            0: root,
+            3: root * 1.12246,
+            5: root,
+            7: root * 1.25992
+        };
+      }
     }
   }
 
@@ -1319,14 +1397,30 @@ if (Math.random() > playChance) return;
         7: root * 1.25992
       };
     } else {
-      // bounce
-      bassPattern = {
-        0: root,
-        3: partner,
-        5: root,
-        7: partner
-      };
-    }
+        // bounce
+        if (motif === "partnerAnswer") {
+          bassPattern = {
+            0: root,
+            3: partner,
+            5: partner,
+            7: root
+          };
+        } else if (motif === "rootHop") {
+          bassPattern = {
+            0: root,
+            3: root,
+            5: partner,
+            7: root
+          };
+        } else {
+          bassPattern = {
+            0: root,
+            3: partner,
+            5: root,
+            7: partner
+          };
+        }
+      }
   }
 
   // 3 emotions
@@ -1382,13 +1476,29 @@ if (Math.random() > playChance) return;
         7: fifth
       };
     } else {
-      // bounce
-      bassPattern = {
-        0: root,
-        3: third,
-        5: root,
-        7: fifth
-      };
+        // bounce
+        if (motif === "partnerAnswer") {
+          bassPattern = {
+            0: root,
+            3: third,
+            5: fifth,
+            7: root
+        };
+        } else if (motif === "rootHop") {
+          bassPattern = {
+            0: root,
+            3: root,
+            5: third,
+            7: fifth
+        };
+        } else {
+          bassPattern = {
+            0: root,
+            3: third,
+            5: root,
+            7: fifth
+        };
+      }
     }
   }
 
@@ -1399,6 +1509,14 @@ if (Math.random() > playChance) return;
   const isGhost = ghostSteps.includes(step);
   const allowGhost = (profile.energy || 3) >= 3;
   if (isGhost && !allowGhost) return;
+  const restSteps = restMap[profile.groove] || [];
+  const isRest = restSteps.includes(step);
+
+  if (isRest && Math.random() < 0.6) {
+  bassJustPlayed = false;
+  return;
+  }
+
   const ghostFreq = freqs[0] * 1.05946; // subtle tension note
   const freq =
     bassPattern[step] ||
@@ -1431,7 +1549,7 @@ if (Math.random() > playChance) return;
   osc.frequency.value = freq * 2;
   } else {
   osc.frequency.value = freq;
-}
+  }
 
   subOsc.type = "sine";
   if (shouldSlide) {
@@ -1440,7 +1558,7 @@ if (Math.random() > playChance) return;
   subOsc.frequency.value = freq;
   } else {
   subOsc.frequency.value = freq / 2;
-}
+  }
 
   filter.type = "lowpass";
   filter.frequency.value = isGhost ? 110 : 180;
@@ -1545,7 +1663,7 @@ const responseChanceByGroove = {
     mysterious: 0.28,
     warm: 0.55,
     soft: 0.45
-}[profile.groove] || 0.50;
+  }[profile.groove] || 0.50;
 
   if (Math.random() > chordPlayChance) return;
 
