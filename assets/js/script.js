@@ -66,19 +66,63 @@ const grooveProfiles = {
     ],
     snarePattern: [0,0,1,0,0,0,1,0],
     hatPattern: [1,1,1,1,1,1,1,1],
-    bassStyle: "bounce"
+    bassStyle: "bounce",
+
+    dna: {
+      kick: {
+        base: [1,0,0,0,1,0,0,0],
+        variants: [
+          [1,0,0,0,1,0,1,0],
+          [1,0,0,1,1,0,0,0]
+        ]
+      },
+
+      phraseMutation: {
+        twoBar: ["lateLift", "hatLift"],
+        fourBar: ["densityUp", "openAir"],
+        sixteenBar: ["stripBack"]
+      },
+
+      energyCurve: {
+        build: [0.95, 1.0, 1.05, 1.1],
+        peak: [1.12, 1.16],
+        release: [0.9, 0.95]
+      }
+    }
   },
 
   driving: {
     kickPattern: [1,0,1,0,1,0,0,0],
     kickVariants: [
-      [1,0,1,0,1,0,0,0], // base
-      [1,0,0,1,1,0,0,0], // pushes into mid-bar
-      [1,0,1,0,0,1,0,0]  // late support hit
+      [1,0,1,0,1,0,0,0],
+      [1,0,0,1,1,0,0,0],
+      [1,0,1,0,0,1,0,0]
     ],
     snarePattern: [0,0,1,0,0,0,1,0],
     hatPattern: [1,1,1,1,1,1,1,1],
-    bassStyle: "run"
+    bassStyle: "run",
+
+    dna: {
+      kick: {
+        base: [1,0,1,0,1,0,0,0],
+        variants: [
+          [1,0,0,1,1,0,0,0],
+          [1,0,1,0,0,1,0,0]
+        ]
+      },
+
+      phraseMutation: {
+        twoBar: ["ghostShift", "lateKick"],
+        fourBar: ["densityUp", "syncopate"],
+        sixteenBar: ["stripBack"]
+      },
+
+      energyCurve: {
+        build: [0.9, 1.0, 1.1, 1.15],
+        peak: [1.2, 1.25],
+        release: [0.85, 0.9]
+      }
+    }
   },
 
   triumphant: {
@@ -90,7 +134,29 @@ const grooveProfiles = {
   ],
     snarePattern: [0,0,1,0,0,0,1,0],
     hatPattern: [1,1,1,1,1,1,1,1],
-    bassStyle: "octave"
+    bassStyle: "octave",
+
+    dna: {
+      kick: {
+        base: [1,0,0,1,1,0,0,1],
+        variants: [
+          [1,0,0,1,0,1,0,1],
+          [1,0,0,0,1,0,1,1]
+        ]
+      },
+
+      phraseMutation: {
+        twoBar: ["pushForward", "accentShift"],
+        fourBar: ["densityUp", "peakDrive"],
+        sixteenBar: ["resolve"]
+      },
+
+      energyCurve: {
+        build: [1.0, 1.05, 1.1, 1.15],
+        peak: [1.2, 1.25],
+        release: [0.95, 1.0]
+      }
+    }
   },
 
   tense: {
@@ -919,8 +985,9 @@ function tick() {
 
   const groove = grooveProfiles[profile.groove];
   const kickPattern =
-  groove.kickVariants?.[barCount % groove.kickVariants.length] ||
-  groove.kickPattern;
+    groove.dna?.kick?.variants?.length
+      ? [groove.dna.kick.base, ...groove.dna.kick.variants][barCount % (groove.dna.kick.variants.length + 1)]
+      : groove.kickVariants?.[barCount % groove.kickVariants.length] || groove.kickPattern;
   const stepIndex = phraseStep % 8;
   const isSecondBar = phraseStep >= 8;
   const isTwoBarTurn = phraseStep === 0 || phraseStep === 8;
@@ -1068,8 +1135,8 @@ function playKick(step) {
     (profile.groove === "driving" || profile.groove === "uplift" || profile.groove === "triumphant") &&
     (step === 2 || step === 6 || step === 7)
   ) {
-    if (Math.random() < 0.7) {
-      volume *= 0.88;
+    if (Math.random() < 0.75) {
+      volume *= 0.82;
     }
   }
 
@@ -1542,7 +1609,15 @@ if (Math.random() > playChance) return;
   const restSteps = restMap[profile.groove] || [];
   const isRest = restSteps.includes(step);
 
-  if (isRest && Math.random() < 0.6) {
+  const restChanceByGroove = {
+    driving: 0.68,
+    uplift: 0.66,
+    triumphant: 0.64
+  };
+
+  const restChance = restChanceByGroove[profile.groove] || 0.6;
+
+  if (isRest && Math.random() < restChance) {
   bassJustPlayed = false;
   return;
   }
@@ -1658,9 +1733,9 @@ function playChord(step, tickTime) {
   if (!profile) return;
 
 const responseChanceByGroove = {
-  uplift: bassJustPlayed ? 0.35 : 0.75,
-  driving: bassJustPlayed ? 0.28 : 0.65,
-  triumphant: bassJustPlayed ? 0.32 : 0.80,
+  uplift: bassJustPlayed ? 0.28 : 0.68,
+  driving: bassJustPlayed ? 0.22 : 0.58,
+  triumphant: bassJustPlayed ? 0.26 : 0.72,
   tense: bassJustPlayed ? 0.22 : 0.50,
   dark: bassJustPlayed ? 0.18 : 0.35,
   brooding: bassJustPlayed ? 0.20 : 0.30,
