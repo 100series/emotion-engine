@@ -2313,6 +2313,38 @@ const primaryWavePresets = {
   }
 };
 
+const emotionalRelationships = {
+  power:       { joy: 0.85, trust: 0.7, anticipation: 0.65, surprise: 0.35, fear: 0.2, sadness: 0.15, disgust: 0.1 },
+  anticipation:{ joy: 0.7, trust: 0.55, power: 0.65, surprise: 0.6, fear: 0.45, sadness: 0.2, disgust: 0.25 },
+  joy:         { power: 0.85, trust: 0.9, anticipation: 0.7, surprise: 0.65, fear: 0.15, sadness: 0.1, disgust: 0.1 },
+  trust:       { joy: 0.9, power: 0.7, anticipation: 0.55, surprise: 0.35, fear: 0.2, sadness: 0.45, disgust: 0.15 },
+  fear:        { surprise: 0.7, sadness: 0.55, anticipation: 0.45, disgust: 0.35, joy: 0.15, trust: 0.2, power: 0.2 },
+  surprise:    { fear: 0.7, anticipation: 0.6, joy: 0.65, power: 0.35, trust: 0.35, sadness: 0.25, disgust: 0.3 },
+  sadness:     { fear: 0.55, trust: 0.45, disgust: 0.4, joy: 0.1, power: 0.15, anticipation: 0.2, surprise: 0.25 },
+  disgust:     { sadness: 0.4, fear: 0.35, surprise: 0.3, anticipation: 0.25, joy: 0.1, trust: 0.15, power: 0.1 }
+};
+
+function getWaveRelationshipFactor(emotion, emotions) {
+  const others = emotions.filter(e => e !== emotion);
+
+  if (!others.length) return 1;
+
+  let total = 0;
+  let count = 0;
+
+  others.forEach(other => {
+    const score =
+      emotionalRelationships[emotion]?.[other] ??
+      emotionalRelationships[other]?.[emotion] ??
+      0.4;
+
+    total += score;
+    count += 1;
+  });
+
+  return count ? total / count : 1;
+}
+
 if (waveSvg) {
   const width = window.innerWidth;
   const height = window.innerHeight;
@@ -2320,50 +2352,132 @@ if (waveSvg) {
   waveSvg.setAttribute("viewBox", `0 0 ${width} ${height}`);
 
   function getCurrentWavePreset() {
-    const activeEmotion = selectedEmotions[0] || "joy";
-    return primaryWavePresets[activeEmotion] || primaryWavePresets.joy;
+  const activeEmotions = selectedEmotions.length
+    ? [...selectedEmotions]
+    : ["joy"];
+
+  const presets = activeEmotions
+    .map(emotion => primaryWavePresets[emotion])
+    .filter(Boolean);
+
+  if (!presets.length) {
+    return primaryWavePresets.joy;
   }
 
-  function buildWavePath(time) {
-    const preset = getCurrentWavePreset();
-    const amplitude = preset.amplitude;
+  const count = presets.length;
+
+  const blended = presets.reduce(
+    (acc, preset) => {
+      acc.amplitude += preset.amplitude;
+      acc.wavelength += preset.wavelength;
+      acc.speed += preset.speed;
+      return acc;
+    },
+    { amplitude: 0, wavelength: 0, speed: 0 }
+  );
+
+  return {
+    color: presets[0].color,
+    amplitude: (blended.amplitude / count) + ((count - 1) * 8),
+    wavelength: (blended.wavelength / count) * 1.2,
+    speed: (blended.speed / count) + ((count - 1) * 0.01)
+  };
+}
+
+  function getActiveWaveEmotions() {
+    return selectedEmotions.length ? [...selectedEmotions] : ["joy"];
+  }
+
+  function buildWavePathForEmotion(emotion, index, emotions, time) {
+    const relationship = getWaveRelationshipFactor(emotion, emotions);
+    const dissonance = 1 - relationship;
+    const preset = primaryWavePresets[emotion] || primaryWavePresets.joy;
     const wavelength = preset.wavelength;
-    const baseline = height / 2;
 
-    let d = "";
+    const baseline =
+      height * 0.22 +
+      Math.sin(time * (0.18 + dissonance * 0.06) + index * (0.25 + dissonance * 0.8)) * (8 + dissonance * 8);
 
-    for (let x = 0; x <= width; x += 20) {
-      const y =
-        baseline +
-        Math.sin((x / wavelength * Math.PI * 2) + time) * amplitude;
+    const points = [];
 
-      if (x === 0) {
-        d += `M ${x} ${y}`;
-      } else {
-        d += ` L ${x} ${y}`;
-      }
+    for (let x = 0; x <= width; x += 24) {
+      const breath =
+        1 + Math.sin(time * (0.3 + dissonance * 0.12) + index * (0.2 + dissonance * 0.9)) * (0.14 + dissonance * 0.08);
+      const amplitude = preset.amplitude * 0.9 * breath;
+
+      const mainWave =
+        Math.sin(
+          (x / (wavelength * (1 - dissonance * 0.08))) * Math.PI * 2 +
+          time * (1 + dissonance * 0.08) +
+          index * (0.12 + dissonance * 0.9)
+        ) * amplitude;
+
+      const y = baseline + mainWave;
+
+      points.push({ x, y });
     }
 
-    return d;
+  if (points.length < 2) return "";
+
+  let d = `M ${points[0].x} ${points[0].y}`;
+
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[i === 0 ? i : i - 1];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = points[i + 2] || p2;
+
+    const cp1x = p1.x + (p2.x - p0.x) / 6;
+    const cp1y = p1.y + (p2.y - p0.y) / 6;
+    const cp2x = p2.x - (p3.x - p1.x) / 6;
+    const cp2y = p2.y - (p3.y - p1.y) / 6;
+
+    d += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2.x} ${p2.y}`;
   }
 
-  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-  path.setAttribute("fill", "none");
-  path.setAttribute("stroke", "rgba(255,255,255,0.4)");
-  path.setAttribute("stroke-width", "3");
+  return d;
+}
+
+  const wavePaths = [];
 
   waveSvg.innerHTML = "";
-  waveSvg.appendChild(path);
+
+  for (let i = 0; i < 3; i++) {
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("fill", "none");
+    path.setAttribute("stroke-width", "3");
+    path.setAttribute("stroke-linecap", "round");
+    path.setAttribute("opacity", "0");
+
+    waveSvg.appendChild(path);
+    wavePaths.push(path);
+  }
 
   let time = 0;
 
   function animate() {
-    const preset = getCurrentWavePreset();
-    time += preset.speed;
+  time += 0.05;
+
+  const emotions = getActiveWaveEmotions();
+  const count = emotions.length;
+
+  wavePaths.forEach((path, index) => {
+    const emotion = emotions[index];
+
+    if (!emotion) {
+      path.setAttribute("opacity", "0");
+      return;
+    }
+
+    const preset = primaryWavePresets[emotion] || primaryWavePresets.joy;
+
+    path.setAttribute("opacity", "0.5");
     path.setAttribute("stroke", preset.color);
-    path.setAttribute("d", buildWavePath(time));
-    requestAnimationFrame(animate);
-  }
+    path.setAttribute("d", buildWavePathForEmotion(emotion, index, emotions, time));
+  });
+
+  requestAnimationFrame(animate);
+}
 
   animate();
 }
