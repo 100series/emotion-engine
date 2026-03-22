@@ -2253,9 +2253,6 @@ if (resetButton) {
   resetButton.addEventListener("click", resetApp);
 }
 
-setStepEmitter(({ step, profile }) => {
-});
-
 renderEmotionButtons();
 updateStatus();
 resetResult();
