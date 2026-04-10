@@ -33,6 +33,9 @@ let step = 0;
 let phraseStep = 0;
 let barCount = 0;
 let bassJustPlayed = false;
+let isDownbeat = false;
+let harmonyHold = null;
+let harmonyHoldBar = -1;
 
 let kickSample;
 let snareSample;
@@ -46,6 +49,7 @@ let lastSnareHit = false;
 let bassMotif = null;
 let bassMotifBar = -1;
 let isDropoutStep = false;
+let isBusyDrumMoment = false;
 
 // ======================
 // MAPPING / DATA
@@ -976,6 +980,9 @@ function startGroove() {
   phraseStep = 0;
   barCount = 0;
 
+  harmonyHold = null;
+  harmonyHoldBar = -1;
+
   tick();
 }
 
@@ -988,7 +995,21 @@ function tick() {
     groove.dna?.kick?.variants?.length
       ? [groove.dna.kick.base, ...groove.dna.kick.variants][barCount % (groove.dna.kick.variants.length + 1)]
       : groove.kickVariants?.[barCount % groove.kickVariants.length] || groove.kickPattern;
+  
   const stepIndex = phraseStep % 8;
+  isDownbeat = stepIndex === 0;
+  const isPreDownbeat = stepIndex === 7;
+
+  const thinChanceByGroove = {
+    driving: 0.7,
+    uplift: 0.65,
+    triumphant: 0.6
+  };
+
+  const shouldThinForOne =
+    isPreDownbeat &&
+    Math.random() < (thinChanceByGroove[profile.groove] || 0.5);
+
   const isSecondBar = phraseStep >= 8;
   const isTwoBarTurn = phraseStep === 0 || phraseStep === 8;
   const evo = getEvolutionState();
@@ -997,13 +1018,20 @@ function tick() {
 
   // DRUMS
   if (!isDropoutStep) {
-    if (kickPattern[stepIndex]) playKick(stepIndex);
-    if (groove.snarePattern[stepIndex]) playSnare(stepIndex);
+    if (kickPattern[stepIndex] && !shouldThinForOne) playKick(stepIndex);
+    if (groove.snarePattern[stepIndex] && !shouldThinForOne) playSnare(stepIndex);
     if (groove.hatPattern[stepIndex]) playHat(stepIndex);
 
-    playShaker(stepIndex);
+    if (!shouldThinForOne) playShaker(stepIndex);
     playOpenHat(stepIndex);
   }
+
+  const isBusyDrumStep =
+    !!kickPattern[stepIndex] ||
+    !!groove.snarePattern[stepIndex] ||
+    !!groove.hatPattern[stepIndex];
+
+  isBusyDrumMoment = isBusyDrumStep;
 
   playSpaceTone(stepIndex);
 
@@ -1082,7 +1110,7 @@ function tick() {
   if (!isDropoutStep) {
     playBass(stepIndex, tickTime);
 
-    if (selectedEmotions.length >= 2) {
+    if (selectedEmotions.length >= 2 && !(isPreDownbeat && Math.random() < 0.6)) {
       playChord(stepIndex, tickTime);
     }
   }
@@ -1090,8 +1118,23 @@ function tick() {
   const swing = stepIndex % 2 ? 1.6 : 0.75;
   const humanize = (Math.random() - 0.5) * 12;
 
+  const sixteenthFeelByGroove = {
+    driving: 4,
+    uplift: 3,
+    triumphant: 4,
+    warm: 2,
+    tense: 3,
+    mysterious: 2,
+    brooding: 1,
+    dark: 1,
+    soft: 2
+  };
+
+  const sixteenthFeel = sixteenthFeelByGroove[profile.groove] || 2;
+  const microPocket = stepIndex % 2 ? sixteenthFeel : -sixteenthFeel * 0.35;
+
   const baseDelay = 120;
-  const delay = (baseDelay * swing) + humanize;
+  const delay = (baseDelay * swing) + humanize + microPocket;
 
   phraseStep = (phraseStep + 1) % 16;
 
@@ -1140,16 +1183,22 @@ function playKick(step) {
     }
   }
 
-  playSample(kickSample, volume);
+  let finalVolume = volume;
+
+  if (isDownbeat) {
+  finalVolume *= 1.25;
+  }
+
+  playSample(kickSample, finalVolume);
 }
 
 function playSnare(step) {
   const accentMap = {
-    2: 0.42,
-    6: 0.50,
-    3: 0.16,
-    5: 0.12,
-    7: 0.22
+    2: 0.46,  // stronger anchor
+    6: 0.54,  // strongest anchor
+    3: 0.14,
+    5: 0.10,
+    7: 0.18
   };
 
   let volume = accentMap[step];
@@ -1159,24 +1208,28 @@ function playSnare(step) {
   if (!profile) return;
 
   if (step === 3 || step === 5) {
-  const ghostChanceByGroove = {
-    driving: 0.8,
-    uplift: 0.75,
-    triumphant: 0.7,
-    warm: 0.55,
-    tense: 0.45,
-    mysterious: 0.35,
-    brooding: 0.3,
-    dark: 0.2,
-    soft: 0.4
-  };
+    const ghostChanceByGroove = {
+      driving: 0.8,
+      uplift: 0.75,
+      triumphant: 0.7,
+      warm: 0.55,
+      tense: 0.45,
+      mysterious: 0.35,
+      brooding: 0.3,
+      dark: 0.2,
+      soft: 0.4
+    };
 
-  const ghostChance = ghostChanceByGroove[profile.groove] || 0.5;
+    const ghostChance = ghostChanceByGroove[profile.groove] || 0.5;
 
-  if (Math.random() < ghostChance) {
-    volume *= step === 3 ? 0.72 : 0.82;
+    if (Math.random() < ghostChance) {
+      // true ghost note
+      volume *= step === 3 ? 0.6 : 0.7;
+    } else {
+      // still softer than anchors, but present
+      volume *= 0.85;
+    }
   }
-}
 
   playSample(snareSample, volume);
 }
@@ -1207,7 +1260,19 @@ function playHat(step) {
   }
 
   // occasional drop for space
-  if (Math.random() < 0.05) return;
+  const hatDropoutByGroove = {
+    driving: 0.02,
+    uplift: 0.03,
+    triumphant: 0.02,
+    warm: 0.06,
+    tense: 0.08,
+    mysterious: 0.1,
+    brooding: 0.12,
+    dark: 0.14,
+    soft: 0.09
+  };
+
+  if (Math.random() < (hatDropoutByGroove[profile.groove] || 0.05)) return;
 
   if (lastKickHit) {
   volume *= 0.82;
@@ -1241,8 +1306,23 @@ function playOpenHat(step) {
   if (!steps.includes(step)) return;
 
   // slight randomness so it's not repetitive
-  const openHatChance = lastSnareHit ? 0.5 : 0.3;
-  if (Math.random() > openHatChance) return;
+  const isPhraseTurn = step === 7 && (barCount % 2 === 1);
+  const isBigTurn = step === 7 && (barCount % 4 === 3);
+  const isSnareAnswer = lastSnareHit && step === 3;
+
+  const openHatByGroove = {
+    driving: isBigTurn,
+    uplift: isPhraseTurn || isSnareAnswer,
+    triumphant: isBigTurn || isSnareAnswer,
+    warm: isBigTurn,
+    tense: false,
+    mysterious: isBigTurn,
+    brooding: false,
+    dark: false,
+    soft: false
+  };
+
+  if (!openHatByGroove[profile.groove]) return;
 
   playSample(openHatSample, 0.35);
 }
@@ -1337,6 +1417,8 @@ if (Math.random() > playChance) return;
 
   let bassPattern = {};
   const motif = bassMotif;
+  const isCallHalf = step <= 3;
+  const isResponseHalf = step >= 4;
   const ghostMap = {
     driving: [1, 6],
     uplift: [1],
@@ -1604,6 +1686,19 @@ if (Math.random() > playChance) return;
   }
 
   const isGhost = ghostSteps.includes(step);
+  const popSteps = {
+    driving: [0, 3],
+    uplift: [0, 5],
+    triumphant: [0, 3, 7],
+    warm: [0],
+    tense: [0, 2],
+    mysterious: [0],
+    brooding: [0],
+    dark: [0],
+    soft: [0]
+  };
+
+  const isPop = popSteps[profile.groove]?.includes(step);
   const allowGhost = (profile.energy || 3) >= 3;
   if (isGhost && !allowGhost) return;
   const restSteps = restMap[profile.groove] || [];
@@ -1637,10 +1732,29 @@ if (Math.random() > playChance) return;
 
   const anticipationChance = anticipationChanceByGroove[profile.groove] || 0.5;
 
+  const responseChanceByGroove = {
+    driving: 0.72,
+    uplift: 0.68,
+    triumphant: 0.7,
+    warm: 0.58,
+    tense: 0.52,
+    mysterious: 0.48,
+    brooding: 0.44,
+    dark: 0.4,
+    soft: 0.5
+  };
+
+  const responseChance = responseChanceByGroove[profile.groove] || 0.55;
+  const shouldPlayResponse = !isResponseHalf || Math.random() < responseChance;
+
   const freq =
-    bassPattern[step] ||
-    (approachMap[step] && Math.random() < anticipationChance ? approachMap[step] : null) ||
-    (isGhost ? ghostFreq : null);
+    shouldPlayResponse
+      ? (
+          bassPattern[step] ||
+          (approachMap[step] && Math.random() < anticipationChance ? approachMap[step] : null) ||
+          (isGhost ? ghostFreq : null)
+        )
+      : null;
 
   if (!freq) return;
 
@@ -1705,8 +1819,18 @@ const duration = isGhost
 
 gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
 const velocitySwing = (step % 2 === 0) ? 1.0 : 0.85;
-const mainBassVolume = (shouldOctaveJump ? 0.50 : 0.42) * velocitySwing;
-gain.gain.linearRampToValueAtTime(isGhost ? 0.06 : mainBassVolume, audioCtx.currentTime + 0.01);
+let mainBassVolume = (shouldOctaveJump ? 0.50 : 0.42) * velocitySwing;
+
+if (isDownbeat) {
+  mainBassVolume *= 1.15;
+}
+
+if (isPop) {
+  mainBassVolume *= 1.25;
+}
+const targetVolume = isGhost ? 0.045 : mainBassVolume;
+
+gain.gain.linearRampToValueAtTime(targetVolume, audioCtx.currentTime + 0.01);
 gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
 
 osc.connect(filter);
@@ -1744,7 +1868,10 @@ const responseChanceByGroove = {
   soft: bassJustPlayed ? 0.40 : 0.45
 };
 
-  if (Math.random() > (responseChanceByGroove[profile.groove] || 0.5)) return;
+  const chordChance = responseChanceByGroove[profile.groove] || 0.5;
+  const drumAwareChordChance = isBusyDrumMoment ? chordChance * 0.7 : chordChance;
+
+  if (Math.random() > drumAwareChordChance) return;
   if (selectedEmotions.length < 2) return;
 
   const groove = grooveProfiles[profile.groove];
@@ -1765,10 +1892,29 @@ const responseChanceByGroove = {
   const activeSteps = chordStepsByGroove[profile.groove] || [2, 6];
   if (!activeSteps.includes(step)) return;
 
-  const freqs = selectedEmotions
-    .map(id => emotionFreqs[id])
-    .filter(Boolean)
-    .sort((a, b) => a - b);
+  const isBassResponseHalf = step >= 4;
+
+  if (
+    isBassResponseHalf &&
+    (profile.groove === "driving" || profile.groove === "uplift" || profile.groove === "triumphant") &&
+    Math.random() < 0.25
+  ) {
+    return;
+  }
+
+  const currentHarmonyBar = Math.floor(barCount / 4);
+
+  if (!harmonyHold || harmonyHoldBar !== currentHarmonyBar) {
+    harmonyHold = selectedEmotions
+      .map(id => emotionFreqs[id])
+      .filter(Boolean)
+      .sort((a, b) => a - b);
+
+    harmonyHoldBar = currentHarmonyBar;
+  }
+
+  const freqs = harmonyHold;
+  if (!freqs || freqs.length < 2) return;
 
   if (freqs.length < 2) return;
 
@@ -1820,31 +1966,44 @@ const responseChanceByGroove = {
 
   // spread + inversion
   if (isTriad) {
+    const [root, third, fifth] = freqs;
+
     if (profile.groove === "triumphant" || profile.groove === "uplift") {
-      // open voicing
-      voicedFreqs = [freqs[0] / 2, freqs[1], freqs[2]];
-    } else if (profile.groove === "dark" || profile.groove === "brooding") {
-      // low clustered voicing
-      voicedFreqs = [freqs[0] / 2, freqs[1] / 2, freqs[2] / 2];
-    } else if (profile.groove === "mysterious") {
-      // second inversion-ish feel
-      voicedFreqs = [freqs[1] / 2, freqs[2] / 2, freqs[0]];
-    } else if (profile.groove === "warm" || profile.groove === "soft") {
-      // gentle spread
-      voicedFreqs = [freqs[0] / 2, freqs[1] / 2, freqs[2]];
-    } else if (profile.groove === "tense") {
-      // tighter, midrange stab
-      voicedFreqs = [freqs[0] / 2, freqs[1] / 2, freqs[2] / 2];
-    } else {
-      voicedFreqs = [freqs[0] / 2, freqs[1] / 2, freqs[2]];
+      // brighter but still funky (add 7th feel via omission + spacing)
+      voicedFreqs = [third, fifth, root * 2]; // omit root in bass range
+      } 
+    else if (profile.groove === "driving") {
+      // tight funk comping
+      voicedFreqs = [third, fifth, root * 1.5];
+    }
+    else if (profile.groove === "warm" || profile.groove === "soft") {
+      // smooth spread
+      voicedFreqs = [third / 2, fifth / 2, root];
+    } 
+    else if (profile.groove === "tense" || profile.groove === "mysterious") {
+      // tighter, clustered, more dissonant feel
+      voicedFreqs = [third / 2, fifth / 2, root * 0.95];
+    } 
+    else if (profile.groove === "dark" || profile.groove === "brooding") {
+      // low, moody cluster
+      voicedFreqs = [third / 2, fifth / 2];
+    } 
+    else {
+      // default funk voicing
+      voicedFreqs = [third, fifth, root];
     }
   } else {
+    const [root, partner] = freqs;
+
     if (profile.groove === "warm" || profile.groove === "soft") {
-      voicedFreqs = [freqs[0] / 2, freqs[1]];
-    } else if (profile.groove === "dark" || profile.groove === "brooding") {
-      voicedFreqs = [freqs[0] / 2, freqs[1] / 2];
-    } else {
-      voicedFreqs = [freqs[0] / 2, freqs[1] / 2];
+      voicedFreqs = [partner / 2, root];
+    } 
+    else if (profile.groove === "dark" || profile.groove === "brooding") {
+      voicedFreqs = [root / 2, partner / 2];
+    } 
+    else {
+      // funk-style dyad
+      voicedFreqs = [partner, root * 1.5];
     }
   }
 
